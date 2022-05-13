@@ -53,15 +53,23 @@ namespace SimulationUI
                         var mat = new DiffuseMaterial(fill);
                         mat.Freeze();
 
-                        var arrow = new ArrowVisual3D
+                        var builder = new MeshBuilder();
+                        builder.AddArrow((Point3D)originVector, (Point3D)(originVector + directionVector), 0.1, thetaDiv: 12);
+                        var geometry = builder.ToMesh(true);
+
+                        var model = new GeometryModel3D
                         {
-                            Point1 = (Point3D)originVector,
-                            Point2 = (Point3D)(originVector + directionVector),
-                            Diameter = 0.1,
-                            Material = mat
+                            Material = mat,
+                            Geometry = geometry
+                        };
+                        model.Freeze();
+
+                        var visual = new ModelVisual3D
+                        {
+                            Content = model
                         };
 
-                        Viewport.Children.Add(arrow);
+                        Viewport.Children.Add(visual);
                     }
                 }
             }

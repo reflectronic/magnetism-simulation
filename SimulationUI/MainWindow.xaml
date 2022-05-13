@@ -10,19 +10,12 @@
     <Grid>
         <UniformGrid x:Name="VectorGrid" />
         <HelixToolkit:HelixViewport3D x:Name="Viewport" CameraMode="WalkAround" ClipToBounds="false">
-            <HelixToolkit:SunLight />
-        </HelixToolkit:HelixViewport3D>
-        <!--Viewport3D x:Name="Viewport">
-            <Viewport3D.Camera>
-                <PerspectiveCamera Position="-30,9,7" LookDirection="50,-4,-6" FieldOfView="40" />
-            </Viewport3D.Camera>
-
             <ModelVisual3D>
                 <ModelVisual3D.Content>
                     <AmbientLight Color="LightGray" />
                 </ModelVisual3D.Content>
             </ModelVisual3D>
-        </Viewport3D-->
+        </HelixToolkit:HelixViewport3D>
         <Button Click="Button_Click" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="20">Calculate field</Button>
     </Grid>
 </Window>
