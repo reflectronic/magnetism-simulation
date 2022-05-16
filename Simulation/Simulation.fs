@@ -11,12 +11,11 @@ module Calculate =
 
     let U m B = Dot(-m, B)
 
-    let potentialField magneticMomentSmall magneticMomentBig sideLength =
-        let stepping = 1f // cm
-        let toPosition index = (float32 index) * stepping
+    let potentialField magneticMomentSmall magneticMomentBig sideLength stepping =
+        
         Array3D.init sideLength sideLength sideLength (fun x y z -> 
-            U magneticMomentSmall 
-            <| B magneticMomentBig (Vector3(toPosition x, toPosition y, toPosition z)))
+            U magneticMomentSmall
+            <| B magneticMomentBig (Vector3(float32 (sideLength - 1) / 2f * stepping) - Vector3(float32 x * stepping, float32 y * stepping, float32 z * stepping)))
 
     [<Struct>]
     type Dimension = X | Y | Z

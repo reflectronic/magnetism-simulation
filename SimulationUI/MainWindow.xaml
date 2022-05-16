@@ -9,7 +9,7 @@
         Title="MainWindow" Height="450" Width="800">
     <Grid>
         <UniformGrid x:Name="VectorGrid" />
-        <HelixToolkit:HelixViewport3D x:Name="Viewport" CameraMode="WalkAround" ClipToBounds="false">
+        <HelixToolkit:HelixViewport3D x:Name="Viewport" CameraMode="WalkAround" ClipToBounds="false" ModelUpDirection="0,0,1" ShowFieldOfView="True">
             <ModelVisual3D>
                 <ModelVisual3D.Content>
                     <AmbientLight Color="LightGray" />
