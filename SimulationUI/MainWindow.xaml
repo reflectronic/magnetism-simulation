@@ -16,6 +16,8 @@
                 </ModelVisual3D.Content>
             </ModelVisual3D>
         </HelixToolkit:HelixViewport3D>
-        <Button Click="Button_Click" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="20">Calculate field</Button>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="20">
+            <Button Click="Calculate_Click">Calculate field</Button>
+        </StackPanel>
     </Grid>
 </Window>

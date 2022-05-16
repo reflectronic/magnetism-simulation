@@ -29,18 +29,11 @@ public partial class MainWindow : Window
         var magneticMomentSmall = new Vector3(0, 0, 1);
         var magneticMomentBig = new Vector3(0, 0, 1);
 
-        var potentials = Calculate.potentialField(
-                magneticMomentSmall,
-                magneticMomentBig,
-                sideLength: 17,
-                stepping: 1);
 
-        if (potentials.OfType<float>().Contains(0))
-        {
-            MessageBox.Show("Hello");
-        }
-
-        var vectorField = Calculate.forceVectorField(potentials);
+        var vectorField = Calculate.simulateForces(sideLength: 17,
+            stepping: 1,
+            magneticMomentSmall,
+            magneticMomentBig);
 
         var vectors = vectorField.OfType<Vector3>().Where(v => !double.IsNaN(v.Length()));
 
@@ -53,7 +46,7 @@ public partial class MainWindow : Window
             () => new SolidColorBrush(Colors.PaleGreen));
         Viewport.Children.Add(smallMomentArrow);
 
-        var center = new Vector3(potentials.GetLength(0) / 2);
+        var center = new Vector3(vectorField.GetLength(0) / 2);
 
         var bigMomentArrow = CreateVisual(
             builder => builder.AddArrow(
