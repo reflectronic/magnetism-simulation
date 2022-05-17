@@ -17,7 +17,9 @@
             </ModelVisual3D>
         </HelixToolkit:HelixViewport3D>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="20">
-            <Button Click="Calculate_Click">Calculate field</Button>
+            <Button Click="Calculate_Click" x:Name="CalculateButton">Calculate field</Button>
+            <Button Click="Visualize_Click" Margin="5,0,0,0" x:Name="VisualizeButton">Visualize simulation</Button>
+            <Button Click="Advance_Click" Margin="5,0,0,0" x:Name="AdvanceButton">Advance simulation</Button>
         </StackPanel>
     </Grid>
 </Window>
