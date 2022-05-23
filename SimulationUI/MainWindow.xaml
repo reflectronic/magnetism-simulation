@@ -12,14 +12,17 @@
         <HelixToolkit:HelixViewport3D x:Name="Viewport" CameraMode="WalkAround" ClipToBounds="false" ModelUpDirection="0,0,1" ShowFieldOfView="True">
             <ModelVisual3D>
                 <ModelVisual3D.Content>
-                    <AmbientLight Color="LightGray" />
+                    <DirectionalLight Color="LightGray" Direction="-0.612372,-0.5,-0.612372" />
+                    <!--AmbientLight Color="DarkGray" /-->
                 </ModelVisual3D.Content>
             </ModelVisual3D>
+            <HelixToolkit:GridLinesVisual3D />
         </HelixToolkit:HelixViewport3D>
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="20">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="20" Background="#DDFFFFFF">
             <Button Click="Calculate_Click" x:Name="CalculateButton">Calculate field</Button>
             <Button Click="Visualize_Click" Margin="5,0,0,0" x:Name="VisualizeButton">Visualize simulation</Button>
-            <Button Click="Advance_Click" Margin="5,0,0,0" x:Name="AdvanceButton">Advance simulation</Button>
+            <Button Click="Advance_Click" Margin="5,0,0,0" x:Name="AdvanceButton">Begin simulation</Button>
+            <Slider ValueChanged="Slider_Changed" Margin="20,0,0,0" x:Name="SpeedSlider" Width="200" Minimum="0" Maximum="20" IsSnapToTickEnabled="True" TickFrequency="1" Value="1" TickPlacement="Both" />
         </StackPanel>
     </Grid>
 </Window>

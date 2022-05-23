@@ -1,74 +1,133 @@
 ﻿namespace Simulation
 
-open System.Numerics
-open type System.Numerics.Vector3
-open type System.MathF
+open Silk.NET.Maths
+open type Silk.NET.Maths.Vector3D
+open type Silk.NET.Maths.Vector3D<float>
+open type System.Math
+
+type Vector3 = Silk.NET.Maths.Vector3D<float>
 
 module Calculate =
-    let Mu = (4f * PI * 10e-7f)
+    let Mu = (4. * PI * 10e-7)
 
-    let B M r = (Mu / (4f * PI)) * (3f * (Dot(M, r) * r) / (r.Length() ** 5f) - (M / (r.Length() ** 3f)))
+    let B (M, r) = (Mu / (4. * PI)) * (3. * (Dot(M, r) * r) / (r.Length ** 5.) - (M / (r.Length ** 3.)))
 
-    let U m B = Dot(-m, B)
+    let U (m, B) = Dot(-m, B)
 
-    let torque m B = Cross(m, B)
+    let torque (m, B) = Cross(m, B)
 
-    [<Struct>]
-    type Dimension = X | Y | Z
+    type Dimension = 
+        | X = 0 
+        | Y = 1 
+        | Z = 2
 
-    let magneticFluxDensityField M sideLength stepping =
-        Array3D.init sideLength sideLength sideLength (fun x y z -> 
-            B M (Vector3(float32 (sideLength - 1) / 2f * stepping) - Vector3(float32 x * stepping, float32 y * stepping, float32 z * stepping)))
-
-    let torqueVectorField m B = 
-        B |> Array3D.map (fun B -> torque m B)
-    
-    let potentialField m B =
-        B |> Array3D.map (fun B -> U m B)
-
-    let forceVectorField U =
-        let edgeIndex dimension index =
-            index = 0 || index + 1 = match dimension with 
-                                     | X -> Array3D.length1 U
-                                     | Y -> Array3D.length2 U
-                                     | Z -> Array3D.length3 U
-
-        let product upperBound exclusions fn = 
+    let force (position: Vector3D<float>, m, M) = 
+        let inline product upperBound exclusions fn = 
+            let mutable partialProduct = 1
+            for i = 0 to upperBound do
+                if not (Array.contains i exclusions) then
+                    partialProduct <- partialProduct * fn i
+                else 
+                    ()
+            partialProduct
+                    
+        (*
             seq { 0..upperBound } 
-            |> Seq.except exclusions 
-            |> Seq.map (fun i -> fn i) 
-            |> Seq.fold (fun partialProduct factor -> partialProduct * factor) 1
+            |> Seq.toArray
+            |> Array.except exclusions 
+            |> Array.map (fun i -> fn i) 
+            |> Array.fold (fun partialProduct factor -> partialProduct * factor) 1
+        *)
 
-        let sum upperBound exclusions fn =
+        
+        let inline sum upperBound exclusions fn =
+            let mutable partialSum = 1
+            for i = 0 to upperBound do
+                if not (Array.contains i exclusions) then
+                    partialSum <- partialSum + fn i
+                else 
+                    ()
+            partialSum
+
+        (*
             seq { 0..upperBound }
-            |> Seq.except exclusions
-            |> Seq.sumBy (fun i -> fn i)
+            |> Seq.toArray
+            |> Array.except exclusions
+            |> Array.sumBy (fun i -> fn i
+         *)
 
         let l' j n = 
-            let numerator = (sum n (Seq.singleton j) 
+            let numerator = (sum n (Array.singleton j) 
                 (fun k -> 
                     product n [| k; j |] (fun l -> (n / 2) - l))) 
-            let denominator = product n (Seq.singleton j) (fun k -> j - k);
-            float32 numerator / float32 denominator
+            let denominator = product n (Array.singleton j) (fun k -> j - k);
+            float numerator / float denominator
         
         let L' yVals = 
             yVals 
-            |> Array.mapi (fun i y -> y * float32 (l' i (yVals.Length - 1))) 
+            |> Array.mapi (fun i y -> y * float (l' i (yVals.Length - 1))) 
             |> Array.sum
                     
-        let approximateGradient x y z dimension =
-            match dimension with
-            | X -> L' [| U.[x - 1, y, z]; U.[x, y, z]; U.[x + 1, y, z] |]
-            | Y -> L' [| U.[x, y - 1, z]; U.[x, y, z]; U.[x, y + 1, z] |]
-            | Z -> L' [| U.[x, y, z - 1]; U.[x, y, z]; U.[x, y, z + 1] |]
+        let approximateGradient (pos: Vector3, dimension) =
+            let currentPosition = match dimension with 
+                                  | Dimension.X -> pos.X
+                                  | Dimension.Y -> pos.Y
+                                  | Dimension.Z -> pos.Z
 
-        U |> Array3D.mapi (fun x y z _ -> 
-            if edgeIndex X x || edgeIndex Y y || edgeIndex Z z then 
-                Vector3() 
-            else 
-                -Vector3(approximateGradient x y z X, approximateGradient x y z Y, approximateGradient x y z Z))
+            let positionGradient = [| currentPosition - 0.001; currentPosition; currentPosition + 0.001 |]
 
-    let simulateForces sideLength stepping smallMagneticMoment bigMagneticMoment =
-        magneticFluxDensityField bigMagneticMoment sideLength stepping
-        |> potentialField smallMagneticMoment
-        |> forceVectorField
+            let radii = positionGradient |> Array.map (fun p -> 
+                match dimension with
+                | Dimension.X -> Vector3(p, pos.Y, pos.Z)
+                | Dimension.Y -> Vector3(pos.X, p, pos.Z)
+                | Dimension.Z -> Vector3(pos.X, pos.Y, p))
+
+            let potentials = radii |> Array.map (fun r -> U(m, B(M, r)))
+
+            L' potentials
+
+        -Vector3(approximateGradient(position, Dimension.X), approximateGradient(position, Dimension.Y), approximateGradient(position, Dimension.Z))
+
+
+    [<Struct>]
+    type SimulatedObject = { Position: Vector3; Velocity: Vector3; AngularVelocity: Vector3; MagneticMoment: Vector3; Mass: float }
+
+
+    let rec runSimulation (M, simulatedObjects, dt, momentOfInertia: System.Func<int, float>, gamma: System.Func<int, float>, callback: System.Func<bool>) =
+        let updatingMap mapping (array: 'T[]) = 
+            for i = 0 to array.Length - 1 do 
+                array.[i] <- mapping (i, array.[i])
+
+        let inline delta (initial: Vector3, acceleration: Vector3) : Vector3 =
+            (initial * dt) + (acceleration * (dt ** 2.) / 2.)
+
+        simulatedObjects |> updatingMap (fun (i, o) -> 
+
+                let magneticForce = force(o.Position, o.MagneticMoment, M)
+
+                let force = if o.Velocity = Zero && magneticForce.Length < 0. then Zero else magneticForce
+
+                let forceDrag = gamma.Invoke(i) * o.Velocity;
+                let acceleration = (force + forceDrag) / o.Mass
+                
+                let torque = torque(o.MagneticMoment, B(M, o.Position))
+
+                let coefficient = ((0.01 ** 2) * o.AngularVelocity.Length) / (4. * PI * 1.004e-1);
+                let angularDrag = o.AngularVelocity * coefficient
+                let angularAcceleration = (torque - angularDrag) / momentOfInertia.Invoke(i)
+
+                let dtheta = delta(o.AngularVelocity, angularAcceleration)
+
+                let len = o.MagneticMoment.Length;
+
+                { o with
+                    Position = o.Position + delta(o.Velocity, acceleration)
+                    Velocity = o.Velocity + acceleration * dt
+                    MagneticMoment = Transform(o.MagneticMoment, Quaternion.CreateFromAxisAngle(Normalize(dtheta), dtheta.Length))
+                    AngularVelocity = o.AngularVelocity + angularAcceleration * dt
+                }
+            )
+
+        if callback.Invoke() then runSimulation (M, simulatedObjects, dt, momentOfInertia, gamma, callback) else ()
+
+        
