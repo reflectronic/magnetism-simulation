@@ -8,8 +8,12 @@ using System.Reflection;
 using System.Security.Cryptography.Xml;
 using System.Threading;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
+
+using Windows.Media;
 
 using static Silk.NET.Maths.Vector3D;
 using Vector3 = Silk.NET.Maths.Vector3D<double>;
@@ -24,9 +28,26 @@ public partial class MainWindow : Window
 {
     public MainWindow()
     {
+        BitmapImage logo = new BitmapImage();
+        logo.BeginInit();
+        logo.UriSource = new Uri("https://static.vecteezy.com/system/resources/previews/000/551/599/original/user-icon-vector.jpg");
+        logo.EndInit();
+
         InitializeComponent();
+        Icon = logo;
+        Title = "Smiley";
         (Viewport.Camera as PerspectiveCamera)!.FieldOfView = 90;
+        var smtc = SystemMediaTransportControlsInterop.GetForWindow(new WindowInteropHelper(this).EnsureHandle());
+        smtc.IsPlayEnabled = true;
+        smtc.IsNextEnabled = false;
+        smtc.IsPreviousEnabled = true;
+        smtc.DisplayUpdater.Type = MediaPlaybackType.Music;
+        smtc.DisplayUpdater.MusicProperties.Title = "Hello World!";
+        smtc.DisplayUpdater.Update();
     }
+
+
+
 
     ModelVisual3D[] arrows;
 
@@ -34,6 +55,7 @@ public partial class MainWindow : Window
     ModelVisual3D cube;
     ModelVisual3D[] momentArrows;
     ModelVisual3D bigMomentArrow;
+    GeometryModel3D cylinder;
     const int sideLength = 15;
 
     Color[] colors = typeof(Colors).GetProperties(BindingFlags.Public | BindingFlags.Static)
@@ -41,19 +63,20 @@ public partial class MainWindow : Window
         .Select(a => (Color)a.GetValue(null))
         .ToArray();
 
-    const double Mass = 0.003;
-    const double Radius = 0.01;
+    const double Mass = Simulation.Calculate.Mass;
+    const double Radius = Simulation.Calculate.Radius;
+
+    static readonly Vector3 InitialPosition = new(-0.2, +0.3, -0.15);
 
     Simulation.Calculate.SimulatedObject[] objects = new Simulation.Calculate.SimulatedObject[]
     {
-        new(new Vector3(-0.2f, 0.1f, 0.3f), Vector3.Zero, Vector3.Zero, initialMagneticMomentSmall, Mass),
+        new(InitialPosition, InitialPosition, Vector3.Zero, Vector3.Zero, initialMagneticMomentSmall, Mass),
     };
 
     double periodMsec;
 
     static readonly Vector3 initialMagneticMomentSmall = new(0, 0, -1);
-    static readonly Vector3 initialMagneticMomentBig = new(0, 0, 1);
-
+    static readonly Vector3 initialMagneticMomentBig = new(0, 0, 3);
 
     static int XYZToIndex(int x, int y, int z)
     {
@@ -66,10 +89,10 @@ public partial class MainWindow : Window
 
     private void Calculate_Click(object sender, RoutedEventArgs e)
     {
-        static ModelVisual3D CreateFrozenVisual(MeshBuilder builder, Brush brush, Transform3D transform)
+        static ModelVisual3D CreateFrozenVisual(MeshBuilder builder, Brush brush, Transform3D transform, bool emissive = false)
         {
             brush.Freeze();
-            var material = new DiffuseMaterial(brush);
+            Material material = emissive ? new EmissiveMaterial(brush) : new DiffuseMaterial(brush);
             material.Freeze();
 
             var mesh = builder.ToMesh(freeze: true);
@@ -86,16 +109,28 @@ public partial class MainWindow : Window
         var sphereBuilder = new MeshBuilder();
         sphereBuilder.AddSphere(new(0, 0, 0));
 
+        var randomColor = colors[Random.Shared.Next(colors.Length)];
+
         balls = new ModelVisual3D[objects.Length];
         for (int i = 0; i < balls.Length; i++)
         {
-            balls[i] = CreateFrozenVisual(sphereBuilder, new SolidColorBrush(colors[Random.Shared.Next(colors.Length)]) { Opacity = 0.75 }, new TranslateTransform3D());
+            balls[i] = CreateFrozenVisual(sphereBuilder, new SolidColorBrush(randomColor) { Opacity = 0.75 }, new TranslateTransform3D());
         }
 
         var cubeBuilder = new MeshBuilder();
         cubeBuilder.AddBox(default(Point3D), 2, 2, 2);
         cube = CreateFrozenVisual(cubeBuilder, new SolidColorBrush(Colors.DarkSalmon) { Opacity = 0.5 }, null);
-        
+
+        var cylinderBuilder = new MeshBuilder();
+        cylinderBuilder.AddArrow(new(0, 0, -1), new(0, 0, 1), 0.4);
+        var cylinderBrush = new SolidColorBrush(randomColor.ChangeIntensity(0.8)) { Opacity = 0.25 };
+        cylinderBrush.Freeze();
+        var cylinderMaterial = new DiffuseMaterial(cylinderBrush);
+        cylinderMaterial.Freeze();
+        var mesh = cylinderBuilder.ToMesh(freeze: true);
+        var model = new GeometryModel3D(mesh, cylinderMaterial);
+        model.Freeze();
+        cylinder = model;
 
         var largeArrowBuilder = new MeshBuilder();
         largeArrowBuilder.AddArrow(new(0, 0, -3), new(0, 0, 3), 0.4);
@@ -179,7 +214,7 @@ public partial class MainWindow : Window
         AxisAngleRotation3D arrowRotation = new();
         bigMomentArrow.Transform = new RotateTransform3D(arrowRotation);
 
-        RotateArrowToFaceDirection(arrowRotation, initialMagneticMomentBig);
+        RotateToFaceDirection(arrowRotation, initialMagneticMomentBig);
 
         VisualizeButton.IsEnabled = false;
     }
@@ -190,7 +225,8 @@ public partial class MainWindow : Window
 
         void ThreadStart()
         {
-
+            int counter = 0;
+            int dispatcherCounter = 0;
             Simulation.Calculate.runSimulation(initialMagneticMomentBig, objects,
                 dt: 0.00001f,
                 momentOfInertia: i => (2.0 / 5) * objects[i].Mass * Radius * Radius,
@@ -203,6 +239,7 @@ public partial class MainWindow : Window
                 {
                     for (int i = 0; i < objects.Length; i++)
                     {
+                        var o = objects[i];
                         var ball = balls[i];
                         var arrow = momentArrows[i];
                         var translateBall = (TranslateTransform3D)ball.Transform;
@@ -210,17 +247,50 @@ public partial class MainWindow : Window
                         var rotateArrow = (RotateTransform3D)groupArrow.Children[0];
                         var translateArrow = (TranslateTransform3D)groupArrow.Children[1];
 
-                        var position = objects[i].Position * 50;
-
-                        if (objects[0].Position.Length < 0.001)
-                            MessageBox.Show("Collision");
-
+                        var position = o.Position * 50;
                         var positions = (position.X, position.Y, position.Z);
 
                         (translateBall.OffsetX, translateBall.OffsetY, translateBall.OffsetZ) = positions;
                         (translateArrow.OffsetX, translateArrow.OffsetY, translateArrow.OffsetZ) = positions;
 
-                        RotateArrowToFaceDirection((AxisAngleRotation3D)rotateArrow.Rotation, objects[0].MagneticMoment);
+                        RotateToFaceDirection((AxisAngleRotation3D)rotateArrow.Rotation, o.MagneticMoment);
+
+                        if (counter % 500 == 0)
+                        {
+                            var axisAngleRotation = new AxisAngleRotation3D();
+                            var deltaR = o.Position - o.PreviousPosition;
+#pragma warning disable CS1718 // Comparison made to same variable
+                            if (deltaR != deltaR || deltaR == Vector3.Zero)
+                            {
+                                continue;
+                            }
+#pragma warning restore CS1718 // Comparison made to same variable
+
+                            RotateToFaceDirection(axisAngleRotation, o.Position - o.PreviousPosition);
+                            axisAngleRotation.Freeze();
+
+                            var cylinderRotation = new RotateTransform3D(axisAngleRotation);
+                            cylinderRotation.Freeze();
+
+                            var cylinderTranslation = new TranslateTransform3D();
+                            (cylinderTranslation.OffsetX, cylinderTranslation.OffsetY, cylinderTranslation.OffsetZ) = positions;
+                            cylinderTranslation.Freeze();
+
+                            var transformGroup = new Transform3DGroup()
+                            {
+                                Children =
+                                {
+                                    cylinderRotation,
+                                    cylinderTranslation
+                                }
+                            };
+                            transformGroup.Freeze();
+                            Viewport.Children.Add(new ModelVisual3D()
+                            {
+                                Content = cylinder,
+                                Transform = transformGroup
+                            });
+                        }
                     }
 
                     /*for (int x = LowBound; x <= HighBound; x++)
@@ -243,9 +313,15 @@ public partial class MainWindow : Window
                             }
                         }
                     }*/
+
+
+                    counter++;
                 }
 
-                Dispatcher.InvokeAsync(UpdateUserInterface, System.Windows.Threading.DispatcherPriority.Background);
+                if (counter % 10 == 0)
+                {
+                    Dispatcher.InvokeAsync(UpdateUserInterface, System.Windows.Threading.DispatcherPriority.Background);
+                }
                 return true;
             });
         }
@@ -256,7 +332,7 @@ public partial class MainWindow : Window
         }.Start();
     }
 
-    private static void RotateArrowToFaceDirection(AxisAngleRotation3D arrowRotation, Vector3 direction)
+    private static void RotateToFaceDirection(AxisAngleRotation3D arrowRotation, Vector3 direction)
     {
         var directionA = Normalize(new Vector3(0, 0, 1));
         var directionB = Normalize(direction);

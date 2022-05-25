@@ -22,7 +22,7 @@ module Calculate =
         | Z = 2
 
     let force (position: Vector3D<float>, m, M) = 
-        let inline product upperBound exclusions fn = 
+        let inline product upperBound exclusions fn =
             let mutable partialProduct = 1
             for i = 0 to upperBound do
                 if not (Array.contains i exclusions) then
@@ -30,14 +30,12 @@ module Calculate =
                 else 
                     ()
             partialProduct
-                    
-        (*
-            seq { 0..upperBound } 
-            |> Seq.toArray
+
+        (* 
+            [| 0..upperBound |]
             |> Array.except exclusions 
             |> Array.map (fun i -> fn i) 
-            |> Array.fold (fun partialProduct factor -> partialProduct * factor) 1
-        *)
+            |> Array.fold (fun partialProduct factor -> partialProduct * factor) 1*)
 
         
         let inline sum upperBound exclusions fn =
@@ -49,12 +47,9 @@ module Calculate =
                     ()
             partialSum
 
-        (*
-            seq { 0..upperBound }
-            |> Seq.toArray
+            (*[| 0..upperBound |]
             |> Array.except exclusions
-            |> Array.sumBy (fun i -> fn i
-         *)
+            |> Array.sumBy (fun i -> fn i)*)
 
         let l' j n = 
             let numerator = (sum n (Array.singleton j) 
@@ -88,10 +83,14 @@ module Calculate =
 
         -Vector3(approximateGradient(position, Dimension.X), approximateGradient(position, Dimension.Y), approximateGradient(position, Dimension.Z))
 
+    [<Literal>]
+    let Radius = 0.01;
+
+    [<Literal>]
+    let Mass = 0.003;
 
     [<Struct>]
-    type SimulatedObject = { Position: Vector3; Velocity: Vector3; AngularVelocity: Vector3; MagneticMoment: Vector3; Mass: float }
-
+    type SimulatedObject = { PreviousPosition: Vector3; Position: Vector3; Velocity: Vector3; AngularVelocity: Vector3; MagneticMoment: Vector3; Mass: float }
 
     let rec runSimulation (M, simulatedObjects, dt, momentOfInertia: System.Func<int, float>, gamma: System.Func<int, float>, callback: System.Func<bool>) =
         let updatingMap mapping (array: 'T[]) = 
@@ -102,10 +101,24 @@ module Calculate =
             (initial * dt) + (acceleration * (dt ** 2.) / 2.)
 
         simulatedObjects |> updatingMap (fun (i, o) -> 
-
                 let magneticForce = force(o.Position, o.MagneticMoment, M)
 
-                let force = if o.Velocity = Zero && magneticForce.Length < 0. then Zero else magneticForce
+                let inline angleBetween (a, b) = Acos(Dot(a, b) / (a.Length * b.Length))
+
+                let xi = Abs(angleBetween(o.MagneticMoment, magneticForce))
+
+                let F_ym = Abs(
+                    if xi < (PI / 9.) then 
+                        Cos(xi) * PI * (Radius ** 2) * 0.0004
+                    else
+                        Cos(xi) * Radius * 0.0002
+                )
+
+                let alpha = -0.80
+
+                let F_net = -alpha * magneticForce + alpha * (Dot(magneticForce, Normalize(o.MagneticMoment)) * o.MagneticMoment) + magneticForce
+
+                let force = if magneticForce.Length < F_ym then Zero else F_net - F_net / F_net.Length * F_ym * Cos(xi)
 
                 let forceDrag = gamma.Invoke(i) * o.Velocity;
                 let acceleration = (force + forceDrag) / o.Mass
@@ -121,6 +134,7 @@ module Calculate =
                 let len = o.MagneticMoment.Length;
 
                 { o with
+                    PreviousPosition = o.Position
                     Position = o.Position + delta(o.Velocity, acceleration)
                     Velocity = o.Velocity + acceleration * dt
                     MagneticMoment = Transform(o.MagneticMoment, Quaternion.CreateFromAxisAngle(Normalize(dtheta), dtheta.Length))
