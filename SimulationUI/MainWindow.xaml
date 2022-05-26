@@ -21,6 +21,7 @@
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="20" Background="#DDFFFFFF">
             <Button Click="Create_Click" x:Name="CreateResourcesButton">Create resources</Button>
             <Button Click="Begin_Click" Margin="5,0,0,0" x:Name="BeginSimulationButton">Begin simulation</Button>
+            <Button Click="Pause_Click" Margin="5,0,0,0" x:Name="PauseButton" IsEnabled="False">Pause</Button>
             <Slider ValueChanged="Slider_Changed" Margin="20,0,0,0" x:Name="SpeedSlider" Width="200" Minimum="0" Maximum="20" IsSnapToTickEnabled="True" TickFrequency="1" Value="1" TickPlacement="Both" />
         </StackPanel>
     </Grid>

@@ -42,10 +42,11 @@ public partial class MainWindow : Window
     /// </summary>
     ModelVisual3D[] momentArrows;
 
-
     GeometryModel3D[] pathArrowModels;
 
     const int sideLength = 15;
+
+    ManualResetEventSlim unpauseEvent = new(initialState: true /* signaled */, spinCount: 0);
 
     Color[] colors = typeof(Colors).GetProperties(BindingFlags.Public | BindingFlags.Static)
         .Where(a => a.PropertyType == typeof(Color))
@@ -141,7 +142,6 @@ public partial class MainWindow : Window
     private void Begin_Click(object sender, RoutedEventArgs e)
     {
         BeginSimulationButton.IsEnabled = false;
-
         void ThreadStart()
         {
             int counter = 0;
@@ -151,6 +151,8 @@ public partial class MainWindow : Window
                 gamma: i => 6 * Math.PI * Radius * 1.002e-3,
                 callback: () =>
             {
+                unpauseEvent.Wait();
+
                 if (counter % 10 == 0)
                 {
                     Dispatcher.InvokeAsync(() => UpdateUserInterface(ref counter), System.Windows.Threading.DispatcherPriority.Background);
@@ -167,6 +169,8 @@ public partial class MainWindow : Window
         {
             IsBackground = true
         }.Start();
+
+        PauseButton.IsEnabled = true;
     }
 
     private void UpdateUserInterface(ref int counter)
@@ -271,5 +275,19 @@ public partial class MainWindow : Window
     private void Slider_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         periodMsec = e.NewValue;
+    }
+
+    private void Pause_Click(object sender, RoutedEventArgs e)
+    {
+        if (unpauseEvent.IsSet)
+        {
+            unpauseEvent.Reset();
+            PauseButton.Content = "Unpause";
+        }
+        else
+        {
+            unpauseEvent.Set();
+            PauseButton.Content = "Pause";
+        }
     }
 }
