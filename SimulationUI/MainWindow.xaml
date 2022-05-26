@@ -19,9 +19,8 @@
             <HelixToolkit:GridLinesVisual3D />
         </HelixToolkit:HelixViewport3D>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="20" Background="#DDFFFFFF">
-            <Button Click="Calculate_Click" x:Name="CalculateButton">Calculate field</Button>
-            <Button Click="Visualize_Click" Margin="5,0,0,0" x:Name="VisualizeButton">Visualize simulation</Button>
-            <Button Click="Advance_Click" Margin="5,0,0,0" x:Name="AdvanceButton">Begin simulation</Button>
+            <Button Click="Create_Click" x:Name="CreateResourcesButton">Create resources</Button>
+            <Button Click="Begin_Click" Margin="5,0,0,0" x:Name="BeginSimulationButton">Begin simulation</Button>
             <Slider ValueChanged="Slider_Changed" Margin="20,0,0,0" x:Name="SpeedSlider" Width="200" Minimum="0" Maximum="20" IsSnapToTickEnabled="True" TickFrequency="1" Value="1" TickPlacement="Both" />
         </StackPanel>
     </Grid>

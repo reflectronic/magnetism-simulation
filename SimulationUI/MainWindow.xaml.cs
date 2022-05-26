@@ -1,23 +1,21 @@
 ﻿#nullable disable
+// Comparison made to same variable
+// We use these checks to quickly test for NaN.
+#pragma warning disable CS1718 
+
 using HelixToolkit.Wpf;
 
 using System;
-using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
-using System.Security.Cryptography.Xml;
 using System.Threading;
 using System.Windows;
-using System.Windows.Interop;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
 
-using Windows.Media;
-
 using static Silk.NET.Maths.Vector3D;
-using Vector3 = Silk.NET.Maths.Vector3D<double>;
 
+using Vector3 = Silk.NET.Maths.Vector3D<double>;
 
 namespace SimulationUI;
 
@@ -28,34 +26,25 @@ public partial class MainWindow : Window
 {
     public MainWindow()
     {
-        BitmapImage logo = new BitmapImage();
-        logo.BeginInit();
-        logo.UriSource = new Uri("https://static.vecteezy.com/system/resources/previews/000/551/599/original/user-icon-vector.jpg");
-        logo.EndInit();
-
         InitializeComponent();
-        Icon = logo;
-        Title = "Smiley";
         (Viewport.Camera as PerspectiveCamera)!.FieldOfView = 90;
-        var smtc = SystemMediaTransportControlsInterop.GetForWindow(new WindowInteropHelper(this).EnsureHandle());
-        smtc.IsPlayEnabled = true;
-        smtc.IsNextEnabled = false;
-        smtc.IsPreviousEnabled = true;
-        smtc.DisplayUpdater.Type = MediaPlaybackType.Music;
-        smtc.DisplayUpdater.MusicProperties.Title = "Hello World!";
-        smtc.DisplayUpdater.Update();
     }
 
-
-
-
-    ModelVisual3D[] arrows;
-
+    /// <summary>
+    /// The <see cref="ModelVisual3D.Transform"/> of a ball is a <see cref="TranslateTransform3D"/>.
+    /// </summary>
     ModelVisual3D[] balls;
-    ModelVisual3D cube;
+
+    /// <summary>
+    /// The <see cref="ModelVisual3D.Transform"/> of a moment arrow is a <see cref="Transform3DGroup"/>. <br />
+    /// <see cref="Transform3DGroup.Children"/>[0] is a <see cref="RotateTransform3D"/>, where <see cref="RotateTransform3D.Rotation"/> is an <see cref="AxisAngleRotation3D"/>. <br />
+    /// <see cref="Transform3DGroup.Children"/>[1] is a <see cref="TranslateTransform3D"/>.
+    /// </summary>
     ModelVisual3D[] momentArrows;
-    ModelVisual3D bigMomentArrow;
-    GeometryModel3D cylinder;
+
+
+    GeometryModel3D[] pathArrowModels;
+
     const int sideLength = 15;
 
     Color[] colors = typeof(Colors).GetProperties(BindingFlags.Public | BindingFlags.Static)
@@ -78,258 +67,172 @@ public partial class MainWindow : Window
     static readonly Vector3 initialMagneticMomentSmall = new(0, 0, -1);
     static readonly Vector3 initialMagneticMomentBig = new(0, 0, 3);
 
-    static int XYZToIndex(int x, int y, int z)
+    private void Create_Click(object sender, RoutedEventArgs e)
     {
-        const int zeroIndex = sideLength / 2;
-        return (x + zeroIndex) * sideLength * sideLength + (y + zeroIndex) * sideLength + (z + zeroIndex);
-    }
-
-    const int LowBound = -sideLength / 2;
-    const int HighBound = sideLength / 2;
-
-    private void Calculate_Click(object sender, RoutedEventArgs e)
-    {
-        static ModelVisual3D CreateFrozenVisual(MeshBuilder builder, Brush brush, Transform3D transform, bool emissive = false)
-        {
-            brush.Freeze();
-            Material material = emissive ? new EmissiveMaterial(brush) : new DiffuseMaterial(brush);
-            material.Freeze();
-
-            var mesh = builder.ToMesh(freeze: true);
-            var model = new GeometryModel3D(mesh, material);
-            model.Freeze();
-
-            return new ModelVisual3D
-            {
-                Content = model,
-                Transform = transform
-            };
-        }
+        CreateResourcesButton.IsEnabled = false;
 
         var sphereBuilder = new MeshBuilder();
         sphereBuilder.AddSphere(new(0, 0, 0));
 
-        var randomColor = colors[Random.Shared.Next(colors.Length)];
+        var momentArrowBuilder = new MeshBuilder();
+        momentArrowBuilder.AddArrow(new(0, 0, -3), new(0, 0, 3), 0.4);
+
+        var pathArrowBuilder = new MeshBuilder();
+        pathArrowBuilder.AddArrow(new(0, 0, -1), new(0, 0, 1), 0.2);
 
         balls = new ModelVisual3D[objects.Length];
-        for (int i = 0; i < balls.Length; i++)
+        momentArrows = new ModelVisual3D[objects.Length];
+        pathArrowModels = new GeometryModel3D[objects.Length];
+
+        for (int i = 0; i < objects.Length; i++)
         {
-            balls[i] = CreateFrozenVisual(sphereBuilder, new SolidColorBrush(randomColor) { Opacity = 0.75 }, new TranslateTransform3D());
-        }
+            var randomColor = colors[Random.Shared.Next(colors.Length)];
 
-        var cubeBuilder = new MeshBuilder();
-        cubeBuilder.AddBox(default(Point3D), 2, 2, 2);
-        cube = CreateFrozenVisual(cubeBuilder, new SolidColorBrush(Colors.DarkSalmon) { Opacity = 0.5 }, null);
-
-        var cylinderBuilder = new MeshBuilder();
-        cylinderBuilder.AddArrow(new(0, 0, -1), new(0, 0, 1), 0.4);
-        var cylinderBrush = new SolidColorBrush(randomColor.ChangeIntensity(0.8)) { Opacity = 0.25 };
-        cylinderBrush.Freeze();
-        var cylinderMaterial = new DiffuseMaterial(cylinderBrush);
-        cylinderMaterial.Freeze();
-        var mesh = cylinderBuilder.ToMesh(freeze: true);
-        var model = new GeometryModel3D(mesh, cylinderMaterial);
-        model.Freeze();
-        cylinder = model;
-
-        var largeArrowBuilder = new MeshBuilder();
-        largeArrowBuilder.AddArrow(new(0, 0, -3), new(0, 0, 3), 0.4);
-        bigMomentArrow = CreateFrozenVisual(largeArrowBuilder, new SolidColorBrush(Colors.IndianRed), new RotateTransform3D(new AxisAngleRotation3D()));
-
-        momentArrows = new ModelVisual3D[balls.Length];
-        
-        for (int i = 0; i < momentArrows.Length; i++)
-        {
-            momentArrows[i] = CreateFrozenVisual(largeArrowBuilder, new SolidColorBrush(Colors.Indigo), new Transform3DGroup
+            static GeometryModel3D CreateFrozenModel(MeshBuilder builder, Brush brush)
             {
-                Children = 
-                {
-                    new RotateTransform3D(new AxisAngleRotation3D()),
-                    new TranslateTransform3D()
-                }
-            });
-        }
+                brush.Freeze();
+                Material material = new DiffuseMaterial(brush);
+                material.Freeze();
 
-        var smallArrowBuilder = new MeshBuilder();
-        smallArrowBuilder.AddArrow(new(0, 0, -0.25), new(0, 0, 0.25), 0.2, thetaDiv: 5);
-        var arrowGeometry = smallArrowBuilder.ToMesh(freeze: true);
+                var mesh = builder.ToMesh(freeze: true);
+                var model = new GeometryModel3D(mesh, material);
+                model.Freeze();
 
-        /*arrows = new ModelVisual3D[sideLength * sideLength * sideLength];
-
-        for (int x = LowBound; x <= HighBound; x++)
-        {
-            for (int y = LowBound; y <= HighBound; y++)
-            {
-                for (int z = LowBound; z <= HighBound; z++)
-                {
-                    var brush = new SolidColorBrush(Colors.Aquamarine) { Opacity = 0.7 };
-                    brush.Freeze();
-
-                    var material = new DiffuseMaterial(brush);
-                    material.Freeze();
-
-                    var model = new GeometryModel3D(arrowGeometry, material);
-                    model.Freeze();
-
-                    arrows[XYZToIndex(x, y, z)] = new ModelVisual3D
-                    {
-                        Content = model,
-                        Transform = new Transform3DGroup()
-                        {
-                            Children =
-                            {
-                                new RotateTransform3D(new AxisAngleRotation3D()),
-                                new TranslateTransform3D(x, y, z)
-                            }
-                        }
-                    };
-                }
+                return model;
             }
-            
-        }*/
 
-        CalculateButton.IsEnabled = false;
-    }
+            var sphereModel = CreateFrozenModel(sphereBuilder, new SolidColorBrush(randomColor) { Opacity = 0.75 });
+            var momentArrowModel = CreateFrozenModel(momentArrowBuilder, new SolidColorBrush(Colors.Indigo));
+            var pathArrowModel = CreateFrozenModel(pathArrowBuilder, new SolidColorBrush(randomColor.ChangeIntensity(0.8)) { Opacity = 0.25 });
 
-    private void Visualize_Click(object sender, RoutedEventArgs e)
-    {
+            balls[i] = new ModelVisual3D
+            {
+                Content = sphereModel,
+                Transform = new TranslateTransform3D()
+            };
+
+            momentArrows[i] = new ModelVisual3D
+            {
+                Content = momentArrowModel,
+                Transform = new Transform3DGroup
+                {
+                    Children =
+                    {
+                        new RotateTransform3D(new AxisAngleRotation3D()),
+                        new TranslateTransform3D()
+                    }
+                }
+            };
+
+            pathArrowModels[i] = pathArrowModel;
+        }
+
         foreach (var ball in balls)
         {
             Viewport.Children.Add(ball);
         }
 
-        if (arrows != null)
-        {
-            foreach (var arrow in arrows)
-            {
-                Viewport.Children.Add(arrow);
-            }
-        }
-
         foreach (var smallMomentArrow in momentArrows)
+        {
             Viewport.Children.Add(smallMomentArrow);
-
-        Viewport.Children.Add(cube);
-
-        AxisAngleRotation3D arrowRotation = new();
-        bigMomentArrow.Transform = new RotateTransform3D(arrowRotation);
-
-        RotateToFaceDirection(arrowRotation, initialMagneticMomentBig);
-
-        VisualizeButton.IsEnabled = false;
+        }
     }
 
-    private void Advance_Click(object sender, RoutedEventArgs e)
+    private void Begin_Click(object sender, RoutedEventArgs e)
     {
-        AdvanceButton.IsEnabled = false;
+        BeginSimulationButton.IsEnabled = false;
 
         void ThreadStart()
         {
             int counter = 0;
-            int dispatcherCounter = 0;
             Simulation.Calculate.runSimulation(initialMagneticMomentBig, objects,
                 dt: 0.00001f,
                 momentOfInertia: i => (2.0 / 5) * objects[i].Mass * Radius * Radius,
                 gamma: i => 6 * Math.PI * Radius * 1.002e-3,
                 callback: () =>
             {
-
-                //Thread.Sleep((int)periodMsec);
-                void UpdateUserInterface()
-                {
-                    for (int i = 0; i < objects.Length; i++)
-                    {
-                        var o = objects[i];
-                        var ball = balls[i];
-                        var arrow = momentArrows[i];
-                        var translateBall = (TranslateTransform3D)ball.Transform;
-                        var groupArrow = (Transform3DGroup)arrow.Transform;
-                        var rotateArrow = (RotateTransform3D)groupArrow.Children[0];
-                        var translateArrow = (TranslateTransform3D)groupArrow.Children[1];
-
-                        var position = o.Position * 50;
-                        var positions = (position.X, position.Y, position.Z);
-
-                        (translateBall.OffsetX, translateBall.OffsetY, translateBall.OffsetZ) = positions;
-                        (translateArrow.OffsetX, translateArrow.OffsetY, translateArrow.OffsetZ) = positions;
-
-                        RotateToFaceDirection((AxisAngleRotation3D)rotateArrow.Rotation, o.MagneticMoment);
-
-                        if (counter % 500 == 0)
-                        {
-                            var axisAngleRotation = new AxisAngleRotation3D();
-                            var deltaR = o.Position - o.PreviousPosition;
-#pragma warning disable CS1718 // Comparison made to same variable
-                            if (deltaR != deltaR || deltaR == Vector3.Zero)
-                            {
-                                continue;
-                            }
-#pragma warning restore CS1718 // Comparison made to same variable
-
-                            RotateToFaceDirection(axisAngleRotation, o.Position - o.PreviousPosition);
-                            axisAngleRotation.Freeze();
-
-                            var cylinderRotation = new RotateTransform3D(axisAngleRotation);
-                            cylinderRotation.Freeze();
-
-                            var cylinderTranslation = new TranslateTransform3D();
-                            (cylinderTranslation.OffsetX, cylinderTranslation.OffsetY, cylinderTranslation.OffsetZ) = positions;
-                            cylinderTranslation.Freeze();
-
-                            var transformGroup = new Transform3DGroup()
-                            {
-                                Children =
-                                {
-                                    cylinderRotation,
-                                    cylinderTranslation
-                                }
-                            };
-                            transformGroup.Freeze();
-                            Viewport.Children.Add(new ModelVisual3D()
-                            {
-                                Content = cylinder,
-                                Transform = transformGroup
-                            });
-                        }
-                    }
-
-                    /*for (int x = LowBound; x <= HighBound; x++)
-                    {
-                        for (int y = LowBound; y <= HighBound; y++)
-                        {
-                            for (int z = LowBound; z <= HighBound; z++)
-                            {
-                                var position = new Vector3(x, y, z) / 50;
-                                var vector = Simulation.Calculate.force(position, objects[0].MagneticMoment, initialMagneticMomentBig);
-
-                                var visual = arrows[XYZToIndex(x, y, z)];
-
-                                var group = (Transform3DGroup)visual.Transform;
-
-                                var rotation = (RotateTransform3D)group.Children[0];
-                                var quaternionRotation = (AxisAngleRotation3D)rotation.Rotation;
-
-                                RotateArrowToFaceDirection(quaternionRotation, vector);
-                            }
-                        }
-                    }*/
-
-
-                    counter++;
-                }
-
                 if (counter % 10 == 0)
                 {
-                    Dispatcher.InvokeAsync(UpdateUserInterface, System.Windows.Threading.DispatcherPriority.Background);
+                    Dispatcher.InvokeAsync(() => UpdateUserInterface(ref counter), System.Windows.Threading.DispatcherPriority.Background);
                 }
-                return true;
+
+                // If o.Position does not equal itself, o.Position is NaN.
+                // At this point, the simulation is not giving us useful information, so stop simulating.
+                return Array.TrueForAll(objects, o => o.Position == o.Position);
             });
+            MessageBox.Show("Simulation ended");
         }
 
         new Thread(ThreadStart)
         {
             IsBackground = true
         }.Start();
+    }
+
+    private void UpdateUserInterface(ref int counter)
+    {
+        for (int i = 0; i < objects.Length; i++)
+        {
+            var o = objects[i];
+            var ballVisual = balls[i];
+            var momentArrowVisual = momentArrows[i];
+
+            var ballVisualTranslation = (TranslateTransform3D)ballVisual.Transform;
+            var momentArrowVisualGroup = (Transform3DGroup)momentArrowVisual.Transform;
+            var momentArrowVisualRotation = (RotateTransform3D)momentArrowVisualGroup.Children[0];
+            var momentArrowVisualTranslation = (TranslateTransform3D)momentArrowVisualGroup.Children[1];
+
+            var position = o.Position * 50;
+            var positions = (position.X, position.Y, position.Z);
+
+            (ballVisualTranslation.OffsetX, ballVisualTranslation.OffsetY, ballVisualTranslation.OffsetZ) = positions;
+            (momentArrowVisualTranslation.OffsetX, momentArrowVisualTranslation.OffsetY, momentArrowVisualTranslation.OffsetZ) = positions;
+
+            RotateToFaceDirection((AxisAngleRotation3D)momentArrowVisualRotation.Rotation, o.MagneticMoment);
+
+            if (counter % 500 == 0)
+            {
+                var positionDelta = o.Position - o.PreviousPosition;
+                if (positionDelta != positionDelta || positionDelta == Vector3.Zero)
+                {
+                    continue;
+                }
+
+                AddPathArrow(pathArrowModels[i], o, positions);
+            }
+        }
+
+        counter++;
+
+        void AddPathArrow(GeometryModel3D pathArrowModel, Simulation.Calculate.SimulatedObject o, (double X, double Y, double Z) positions)
+        {
+            var axisAngleRotation = new AxisAngleRotation3D();
+            RotateToFaceDirection(axisAngleRotation, o.Position - o.PreviousPosition);
+            axisAngleRotation.Freeze();
+
+            var pathArrowRotation = new RotateTransform3D(axisAngleRotation);
+            pathArrowRotation.Freeze();
+
+            var pathArrowTranslation = new TranslateTransform3D();
+            (pathArrowTranslation.OffsetX, pathArrowTranslation.OffsetY, pathArrowTranslation.OffsetZ) = positions;
+            pathArrowTranslation.Freeze();
+
+            var transformGroup = new Transform3DGroup()
+            {
+                Children =
+                {
+                    pathArrowRotation,
+                    pathArrowTranslation
+                }
+            };
+            transformGroup.Freeze();
+
+            Viewport.Children.Add(new ModelVisual3D()
+            {
+                Content = pathArrowModel,
+                Transform = transformGroup
+            });
+        }
     }
 
     private static void RotateToFaceDirection(AxisAngleRotation3D arrowRotation, Vector3 direction)
