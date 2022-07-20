@@ -17,31 +17,29 @@ module Calculate =
     let torque (m, B) = Cross(m, B)
 
     type Dimension = 
-        | X = 0 
-        | Y = 1 
-        | Z = 2
+        | X 
+        | Y 
+        | Z
 
     let force (position: Vector3D<float>, m, M) = 
         let inline product upperBound exclusions fn =
-            let mutable partialProduct = 1
+            let mutable partialProduct = 1.
             for i = 0 to upperBound do
-                if not (Array.contains i exclusions) then
+                if not (exclusions |> Array.contains i ) then
                     partialProduct <- partialProduct * fn i
                 else 
                     ()
             partialProduct
 
-        (* 
-            [| 0..upperBound |]
+            (*[| 0..upperBound |]
             |> Array.except exclusions 
             |> Array.map (fun i -> fn i) 
             |> Array.fold (fun partialProduct factor -> partialProduct * factor) 1*)
 
-        
         let inline sum upperBound exclusions fn =
-            let mutable partialSum = 1
+            let mutable partialSum = 0.
             for i = 0 to upperBound do
-                if not (Array.contains i exclusions) then
+                if not (exclusions |> Array.contains i) then
                     partialSum <- partialSum + fn i
                 else 
                     ()
@@ -51,16 +49,38 @@ module Calculate =
             |> Array.except exclusions
             |> Array.sumBy (fun i -> fn i)*)
 
-        let l' j n = 
+        // We use a polynomial interpolation to estimate the gradient of the potentials.
+        // The Lagrange form of the interpolation is:
+        //        𝑛
+        // 𝐿(𝑥) = Σ  yⱼ * 𝑙ⱼ(𝑥).
+        //       𝑗=0
+        //
+        // To find the gradient, we take the derivative of the Lagrange form, so the formula for gradient is:
+        //         𝑛
+        // 𝐿'(𝑥) = Σ = yⱼ * 𝑙ⱼ'(𝑥)
+        //        𝑗=0 
+        //
+        // 𝑙ⱼ'(𝑥) represents the derivative of the Lagrange basis polynomial, given as:
+        //         𝑛         𝑛
+        // 𝑙ⱼ'(𝑥) = Σ        (Π (𝑥 - 𝑥ₗ))
+        //        𝑘=0, 𝑘≠𝑗   𝑙=0, 𝑙≠𝑘, 𝑙≠𝑗
+        //       -----------------------
+        //                 𝑛
+        //                 Π (𝑥ⱼ - 𝑥ₖ)
+        //                𝑘=0, 𝑘≠𝑗 
+
+        let l' (j, n, dx: float) = 
+            assert(n = 2) 
+            let x = [| -dx; 0; dx |]
             let numerator = (sum n (Array.singleton j) 
                 (fun k -> 
-                    product n [| k; j |] (fun l -> (n / 2) - l))) 
-            let denominator = product n (Array.singleton j) (fun k -> j - k);
+                    product n [| k; j |] (fun l -> 0. - x.[l]))) 
+            let denominator = product n (Array.singleton j) (fun k -> x.[j] - x.[k]);
             float numerator / float denominator
         
-        let L' yVals = 
+        let L' (yVals, dx) = 
             yVals 
-            |> Array.mapi (fun i y -> y * float (l' i (yVals.Length - 1))) 
+            |> Array.mapi (fun i y -> y * float (l'(i, yVals.Length - 1, dx))) 
             |> Array.sum
                     
         let approximateGradient (pos: Vector3, dimension) =
@@ -68,8 +88,9 @@ module Calculate =
                                   | Dimension.X -> pos.X
                                   | Dimension.Y -> pos.Y
                                   | Dimension.Z -> pos.Z
-
-            let positionGradient = [| currentPosition - 0.001; currentPosition; currentPosition + 0.001 |]
+            
+            let dx = 0.001
+            let positionGradient = [| currentPosition - dx; currentPosition; currentPosition + dx |]
 
             let radii = positionGradient |> Array.map (fun p -> 
                 match dimension with
@@ -79,7 +100,7 @@ module Calculate =
 
             let potentials = radii |> Array.map (fun r -> U(m, B(M, r)))
 
-            L' potentials
+            L'(potentials, dx)
 
         -Vector3(approximateGradient(position, Dimension.X), approximateGradient(position, Dimension.Y), approximateGradient(position, Dimension.Z))
 
@@ -127,7 +148,7 @@ module Calculate =
 
                 let coefficient = ((0.01 ** 2) * o.AngularVelocity.Length) / (4. * PI * 1.004e-1);
                 let angularDrag = o.AngularVelocity * coefficient
-                let angularAcceleration = (torque - angularDrag) / momentOfInertia.Invoke(i)
+                let angularAcceleration = (torque - Zero) / momentOfInertia.Invoke(i)
 
                 let dtheta = delta(o.AngularVelocity, angularAcceleration)
 

@@ -146,7 +146,7 @@ public partial class MainWindow : Window
         {
             int counter = 0;
             Simulation.Calculate.runSimulation(initialMagneticMomentBig, objects,
-                dt: 0.00001f,
+                dt: 0.000001,
                 momentOfInertia: i => (2.0 / 5) * objects[i].Mass * Radius * Radius,
                 gamma: i => 6 * Math.PI * Radius * 1.002e-3,
                 callback: () =>
