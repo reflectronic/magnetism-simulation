@@ -8,7 +8,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="HelixToolkit.Wpf" Version="2.20.2" />
+	  <PackageReference Include="HelixToolkit.Wpf" Version="2.20.2">
+		  <NoWarn>NU1701</NoWarn>
+	  </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
