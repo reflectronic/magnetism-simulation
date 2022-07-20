@@ -2,7 +2,7 @@
 
 open Silk.NET.Maths
 open type Silk.NET.Maths.Vector3D
-open type Silk.NET.Maths.Vector3D<float>
+open type Vector3D<float>
 open type System.Math
 
 type Vector3 = Silk.NET.Maths.Vector3D<float>
@@ -85,24 +85,24 @@ module Calculate =
                     
         let approximateGradient (pos: Vector3, dimension) =
             let currentPosition = match dimension with 
-                                  | Dimension.X -> pos.X
-                                  | Dimension.Y -> pos.Y
-                                  | Dimension.Z -> pos.Z
+                                  | X -> pos.X
+                                  | Y -> pos.Y
+                                  | Z -> pos.Z
             
             let dx = 0.001
             let positionGradient = [| currentPosition - dx; currentPosition; currentPosition + dx |]
 
             let radii = positionGradient |> Array.map (fun p -> 
                 match dimension with
-                | Dimension.X -> Vector3(p, pos.Y, pos.Z)
-                | Dimension.Y -> Vector3(pos.X, p, pos.Z)
-                | Dimension.Z -> Vector3(pos.X, pos.Y, p))
+                | X -> Vector3(p, pos.Y, pos.Z)
+                | Y -> Vector3(pos.X, p, pos.Z)
+                | Z -> Vector3(pos.X, pos.Y, p))
 
             let potentials = radii |> Array.map (fun r -> U(m, B(M, r)))
 
             L'(potentials, dx)
 
-        -Vector3(approximateGradient(position, Dimension.X), approximateGradient(position, Dimension.Y), approximateGradient(position, Dimension.Z))
+        -Vector3(approximateGradient(position, X), approximateGradient(position, Y), approximateGradient(position, Z))
 
     [<Literal>]
     let Radius = 0.01;
