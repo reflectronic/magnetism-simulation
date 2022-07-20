@@ -44,11 +44,9 @@ public partial class MainWindow : Window
 
     GeometryModel3D[] pathArrowModels;
 
-    const int sideLength = 15;
-
-    ManualResetEventSlim unpauseEvent = new(initialState: true /* signaled */, spinCount: 0);
-
-    Color[] colors = typeof(Colors).GetProperties(BindingFlags.Public | BindingFlags.Static)
+    readonly ManualResetEventSlim unpauseEvent = new(initialState: true /* signaled */, spinCount: 0);
+    
+    readonly Color[] colors = typeof(Colors).GetProperties(BindingFlags.Public | BindingFlags.Static)
         .Where(a => a.PropertyType == typeof(Color))
         .Select(a => (Color)a.GetValue(null))
         .ToArray();
