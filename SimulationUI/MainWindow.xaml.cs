@@ -69,7 +69,11 @@ public partial class MainWindow : Window
     private void Create_Click(object sender, RoutedEventArgs e)
     {
         CreateResourcesButton.IsEnabled = false;
-
+        
+        var bigSphereBuilder = new MeshBuilder();
+        bigSphereBuilder.AddSphere(new(0, 0, 0), 1.5);
+        bigSphereBuilder.AddArrow(new(0, 0, -5), new(0, 0, 5), 0.6); //This is bad, but okay for now - DV
+        
         var sphereBuilder = new MeshBuilder();
         sphereBuilder.AddSphere(new(0, 0, 0));
 
@@ -79,6 +83,7 @@ public partial class MainWindow : Window
         var pathArrowBuilder = new MeshBuilder();
         pathArrowBuilder.AddArrow(new(0, 0, -1), new(0, 0, 1), 0.2);
 
+        var bigBalls = new ModelVisual3D[objects.Length];
         balls = new ModelVisual3D[objects.Length];
         momentArrows = new ModelVisual3D[objects.Length];
         pathArrowModels = new GeometryModel3D[objects.Length];
@@ -100,9 +105,15 @@ public partial class MainWindow : Window
                 return model;
             }
 
+            var bigSphereModel = CreateFrozenModel(bigSphereBuilder, new SolidColorBrush(Colors.Red) { Opacity = 0.85 });
             var sphereModel = CreateFrozenModel(sphereBuilder, new SolidColorBrush(randomColor) { Opacity = 0.75 });
             var momentArrowModel = CreateFrozenModel(momentArrowBuilder, new SolidColorBrush(Colors.Indigo));
             var pathArrowModel = CreateFrozenModel(pathArrowBuilder, new SolidColorBrush(randomColor.ChangeIntensity(0.8)) { Opacity = 0.25 });
+            
+            bigBalls[i] = new ModelVisual3D
+            {
+                Content = bigSphereModel
+            };
 
             balls[i] = new ModelVisual3D
             {
@@ -126,6 +137,11 @@ public partial class MainWindow : Window
             pathArrowModels[i] = pathArrowModel;
         }
 
+        foreach (var bigBall in bigBalls)
+        {
+            Viewport.Children.Add(bigBall);
+        }
+        
         foreach (var ball in balls)
         {
             Viewport.Children.Add(ball);
@@ -154,6 +170,10 @@ public partial class MainWindow : Window
                 if (counter % 10 == 0)
                 {
                     Dispatcher.InvokeAsync(() => UpdateUserInterface(ref counter), System.Windows.Threading.DispatcherPriority.Background);
+                    if(!unpauseEvent.IsSet)
+                    {
+                        Console.WriteLine("FLYTHROUGH ERROR! PAUSE ISSUE!");
+                    }
                 }
 
                 // If o.Position does not equal itself, o.Position is NaN.
@@ -201,6 +221,7 @@ public partial class MainWindow : Window
                 }
 
                 AddPathArrow(pathArrowModels[i], o, positions);
+                //Console.WriteLine("Arrow made! #" + counter/500);
             }
         }
 
@@ -281,6 +302,13 @@ public partial class MainWindow : Window
         {
             unpauseEvent.Reset();
             PauseButton.Content = "Unpause";
+            Console.WriteLine("Mass: " + objects[0].Mass + "\n" +
+                              "Position: " + objects[0].Position + "\n" +
+                              "Velocity: " + objects[0].Velocity + "\n" +
+                              "Mag. Moment: " + objects[0].MagneticMoment + "\n" +
+                              "Ang. Velocity: " + objects[0].AngularVelocity + "\n" +
+                              "Simulation will NOT proceed as normal.\n"
+            );
         }
         else
         {
