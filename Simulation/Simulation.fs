@@ -7,6 +7,18 @@ open type System.Math
 
 type Vector3 = Silk.NET.Maths.Vector3D<float>
 
+[<Struct>]
+type SimulatedObject = 
+    { 
+        PreviousPosition: Vector3;
+        Position: Vector3;
+        Velocity: Vector3;
+        AngularVelocity: Vector3;
+        MagneticMoment: Vector3;
+        Mass: float;
+        Radius: float
+    }
+
 module Calculate =
     let Mu = (4. * PI * 10e-7)
 
@@ -106,80 +118,54 @@ module Calculate =
 
         -Vector3(approximateGradient(position, X), approximateGradient(position, Y), approximateGradient(position, Z))
 
-    [<Literal>]
-    let Radius = 0.01;
-
-    [<Literal>]
-    let Mass = 0.003;
-
-    [<Struct>]
-    type SimulatedObject = { PreviousPosition: Vector3; Position: Vector3; Velocity: Vector3; AngularVelocity: Vector3; MagneticMoment: Vector3; Mass: float }
-
-    let rec runSimulation (M, simulatedObjects, dt, momentOfInertia: System.Func<int, float>, gamma: System.Func<int, float>, callback: System.Func<bool>) =
-        let updatingMap mapping (array: 'T[]) = 
-            for i = 0 to array.Length - 1 do 
-                array.[i] <- mapping (i, array.[i])
-
+    let rec runSimulation (pair: byref<struct (SimulatedObject * SimulatedObject)>, 
+                           dt, 
+                           momentOfInertia: System.Func<SimulatedObject, float>, 
+                           gamma: System.Func<SimulatedObject, float>, 
+                           callback: System.Func<bool>) =
         let inline delta (initial: Vector3, acceleration: Vector3) : Vector3 =
             (initial * dt) + (acceleration * (dt ** 2.) / 2.)
+            
+        let inline angleBetween (a, b) = Acos(Dot(a, b) / (a.Length * b.Length))
 
-        simulatedObjects |> updatingMap (fun (i, o) -> 
-                let magneticForce = force(o.Position, o.MagneticMoment, M)
+        let struct (o1, o2) = pair
+            
+        // The net force applied on both objects is the same (Newton's third law).
+        // We can calculate the force applied to o1 as a result of o2's magnetic field,
+        // and apply the opposite of that force to o2.
+        // Since the radius of both balls is not the same, however, the threshold force
+        // will need to be calculated independently for both.
 
-                let inline angleBetween (a, b) = Acos(Dot(a, b) / (a.Length * b.Length))
+        let magneticForce = force(o1.Position - o2.Position, o1.MagneticMoment, o2.MagneticMoment)
 
-                let xi = Abs(angleBetween(o.MagneticMoment, magneticForce))
+        let calculateBallDelta (magneticForce, o, otherObject) = 
+            let forceDrag = gamma.Invoke(o) * o1.Velocity;
+            let acceleration: Vector3 = (magneticForce + forceDrag) / o.Mass
 
-                let F_ym = Abs(
-                    if xi < (PI / 9.) then 
-                        Cos(xi) * PI * (Radius ** 2) * 0.0004
-                    else
-                        Cos(xi) * Radius * 0.0002
-                )
-
-                let alpha = -0.80
-
-                let F_net = -alpha * magneticForce + alpha * (Dot(magneticForce, Normalize(o.MagneticMoment)) * o.MagneticMoment) + magneticForce
-
-                let force = if magneticForce.Length < F_ym then Zero else F_net - F_net / F_net.Length * F_ym * Cos(xi)
-
-                let forceDrag = gamma.Invoke(i) * o.Velocity;
+            // This isn't fully correct
+            // Things to add:
+            // - If movement is sharper than at threshold angle, movement goes along 
+            //   previous trajectory
+            //   - We can draw a "line" and if the angle is too sharp we snap the trajectory to it 
+            //     by a certain amount (the projection, probably)
+            //   - We can also create "tunnel cylinders" to demarkate the torn medium and diretion, and use those
                 
-                let acceleration = (force + forceDrag) / o.Mass
-                
-                //if (force |> thresholdForce) then
-                //    let acceleration = (force + forceDrag) / o.Mass
-                //else 
-                //    let acceleration = Zero
+            let torque = torque(o.MagneticMoment, B(otherObject.MagneticMoment, o.Position - otherObject.Position))
 
-                // This isn't fully correct
-                // Things to add:
-                // - If movement is sharper than at threshold angle, movement goes along 
-                //   previous trajectory
-                //   - We can draw a "line" and if the angle is too sharp we snap the trajectory to it 
-                //     by a certain amount (the projection, probably)
-                //   - We can also create "tunnel cylinders" to demarkate the torn medium and diretion, and use those
-                
-                let torque = torque(o.MagneticMoment, B(M, o.Position))
+            let coefficient = ((0.01 ** 2) * o.AngularVelocity.Length) / (4. * PI * 1.004e-1);
+            let angularDrag = o.AngularVelocity * coefficient
+            let angularAcceleration = (torque - angularDrag) / momentOfInertia.Invoke(o)
 
-                let coefficient = ((0.01 ** 2) * o.AngularVelocity.Length) / (4. * PI * 1.004e-1);
-                let angularDrag = o.AngularVelocity * coefficient
-                //let angularAcceleration = (torque - Zero) / momentOfInertia.Invoke(i)
-                let angularAcceleration = (torque - angularDrag) / momentOfInertia.Invoke(i)
+            let dtheta = delta(o.AngularVelocity, angularAcceleration)
 
-                let dtheta = delta(o.AngularVelocity, angularAcceleration)
+            { o with
+                PreviousPosition = o.Position
+                Position = o.Position + delta(o.Velocity, acceleration)
+                Velocity = o.Velocity + acceleration * dt
+                MagneticMoment = Transform(o.MagneticMoment, Quaternion.CreateFromAxisAngle(Normalize(dtheta), dtheta.Length))
+                AngularVelocity = o.AngularVelocity + angularAcceleration * dt
+            }
 
-                let len = o.MagneticMoment.Length;
-
-                { o with
-                    PreviousPosition = o.Position
-                    Position = o.Position + delta(o.Velocity, acceleration)
-                    Velocity = o.Velocity + acceleration * dt
-                    MagneticMoment = Transform(o.MagneticMoment, Quaternion.CreateFromAxisAngle(Normalize(dtheta), dtheta.Length))
-                    AngularVelocity = o.AngularVelocity + angularAcceleration * dt
-                }
-            )
-
-        if callback.Invoke() then runSimulation (M, simulatedObjects, dt, momentOfInertia, gamma, callback) else ()
-
+        pair <- struct(calculateBallDelta (magneticForce, o1, o2), calculateBallDelta (-magneticForce, o2, o1))
         
+        if callback.Invoke() then runSimulation (&pair, dt, momentOfInertia, gamma, callback) else ()

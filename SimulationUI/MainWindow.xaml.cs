@@ -5,9 +5,12 @@
 
 using HelixToolkit.Wpf;
 
+using Microsoft.FSharp.Core;
+
 using System;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Windows;
 using System.Windows.Media;
@@ -51,15 +54,16 @@ public partial class MainWindow : Window
         .Select(a => (Color)a.GetValue(null))
         .ToArray();
 
-    const double Mass = Simulation.Calculate.Mass;
-    const double Radius = Simulation.Calculate.Radius;
-
     static readonly Vector3 InitialPosition = new(-0.2, +0.3, -0.15);
 
-    Simulation.Calculate.SimulatedObject[] objects = new Simulation.Calculate.SimulatedObject[]
-    {
-        new(InitialPosition, InitialPosition, Vector3.Zero, Vector3.Zero, initialMagneticMomentSmall, Mass),
-    };
+
+    const double Radius = 0.01;
+    const double Mass = 0.003;
+
+    (Simulation.SimulatedObject, Simulation.SimulatedObject) objectPair = (
+        new(InitialPosition, InitialPosition, Vector3.Zero, Vector3.Zero, initialMagneticMomentSmall, Mass * 10, Radius),
+        new(Vector3.Zero, Vector3.Zero, Vector3.Zero, Vector3.Zero, initialMagneticMomentBig, Mass, Radius)
+    );
 
     double periodMsec;
 
@@ -70,10 +74,6 @@ public partial class MainWindow : Window
     {
         CreateResourcesButton.IsEnabled = false;
         
-        var bigSphereBuilder = new MeshBuilder();
-        bigSphereBuilder.AddSphere(new(0, 0, 0), 1.5);
-        bigSphereBuilder.AddArrow(new(0, 0, -5), new(0, 0, 5), 0.6); //This is bad, but okay for now - DV
-        
         var sphereBuilder = new MeshBuilder();
         sphereBuilder.AddSphere(new(0, 0, 0));
 
@@ -83,7 +83,8 @@ public partial class MainWindow : Window
         var pathArrowBuilder = new MeshBuilder();
         pathArrowBuilder.AddArrow(new(0, 0, -1), new(0, 0, 1), 0.2);
 
-        var bigBalls = new ModelVisual3D[objects.Length];
+        var objects = (ITuple)objectPair;
+
         balls = new ModelVisual3D[objects.Length];
         momentArrows = new ModelVisual3D[objects.Length];
         pathArrowModels = new GeometryModel3D[objects.Length];
@@ -105,20 +106,23 @@ public partial class MainWindow : Window
                 return model;
             }
 
-            var bigSphereModel = CreateFrozenModel(bigSphereBuilder, new SolidColorBrush(Colors.Red) { Opacity = 0.85 });
             var sphereModel = CreateFrozenModel(sphereBuilder, new SolidColorBrush(randomColor) { Opacity = 0.75 });
             var momentArrowModel = CreateFrozenModel(momentArrowBuilder, new SolidColorBrush(Colors.Indigo));
             var pathArrowModel = CreateFrozenModel(pathArrowBuilder, new SolidColorBrush(randomColor.ChangeIntensity(0.8)) { Opacity = 0.25 });
-            
-            bigBalls[i] = new ModelVisual3D
-            {
-                Content = bigSphereModel
-            };
 
+
+            var visualRadius = 1; // ((Simulation.SimulatedObject)objects[i]).Radius * 100;
             balls[i] = new ModelVisual3D
             {
                 Content = sphereModel,
-                Transform = new TranslateTransform3D()
+                Transform = new Transform3DGroup
+                {
+                    Children = 
+                    {
+                        new ScaleTransform3D(new(visualRadius, visualRadius, visualRadius)),
+                        new TranslateTransform3D()
+                    }
+                }
             };
 
             momentArrows[i] = new ModelVisual3D
@@ -135,11 +139,6 @@ public partial class MainWindow : Window
             };
 
             pathArrowModels[i] = pathArrowModel;
-        }
-
-        foreach (var bigBall in bigBalls)
-        {
-            Viewport.Children.Add(bigBall);
         }
         
         foreach (var ball in balls)
@@ -159,9 +158,9 @@ public partial class MainWindow : Window
         void ThreadStart()
         {
             int counter = 0;
-            Simulation.Calculate.runSimulation(initialMagneticMomentBig, objects,
+            Simulation.Calculate.runSimulation(ref objectPair,
                 dt: 0.000001,
-                momentOfInertia: i => (2.0 / 5) * objects[i].Mass * Radius * Radius,
+                momentOfInertia: o => (2.0 / 5) * o.Mass * o.Radius * o.Radius,
                 gamma: i => 6 * Math.PI * Radius * 1.002e-3,
                 callback: () =>
             {
@@ -178,7 +177,8 @@ public partial class MainWindow : Window
 
                 // If o.Position does not equal itself, o.Position is NaN.
                 // At this point, the simulation is not giving us useful information, so stop simulating.
-                return Array.TrueForAll(objects, o => o.Position == o.Position);
+                return objectPair.Item1.Position == objectPair.Item1.Position &&
+                       objectPair.Item2.Position == objectPair.Item2.Position;
             });
             MessageBox.Show("Simulation ended");
         }
@@ -193,13 +193,16 @@ public partial class MainWindow : Window
 
     private void UpdateUserInterface(ref int counter)
     {
+        var objects = (ITuple)objectPair;
         for (int i = 0; i < objects.Length; i++)
         {
-            var o = objects[i];
+            var o = (Simulation.SimulatedObject)objects[i];
             var ballVisual = balls[i];
             var momentArrowVisual = momentArrows[i];
 
-            var ballVisualTranslation = (TranslateTransform3D)ballVisual.Transform;
+            var ballVisualTranslationGroup = (Transform3DGroup)ballVisual.Transform;
+            var ballVisualTranslation= (TranslateTransform3D)ballVisualTranslationGroup.Children[1];
+
             var momentArrowVisualGroup = (Transform3DGroup)momentArrowVisual.Transform;
             var momentArrowVisualRotation = (RotateTransform3D)momentArrowVisualGroup.Children[0];
             var momentArrowVisualTranslation = (TranslateTransform3D)momentArrowVisualGroup.Children[1];
@@ -227,7 +230,7 @@ public partial class MainWindow : Window
 
         counter++;
 
-        void AddPathArrow(GeometryModel3D pathArrowModel, Simulation.Calculate.SimulatedObject o, (double X, double Y, double Z) positions)
+        void AddPathArrow(GeometryModel3D pathArrowModel, Simulation.SimulatedObject o, (double X, double Y, double Z) positions)
         {
             var axisAngleRotation = new AxisAngleRotation3D();
             RotateToFaceDirection(axisAngleRotation, o.Position - o.PreviousPosition);
@@ -302,13 +305,13 @@ public partial class MainWindow : Window
         {
             unpauseEvent.Reset();
             PauseButton.Content = "Unpause";
-            Console.WriteLine("Mass: " + objects[0].Mass + "\n" +
+            /*Console.WriteLine("Mass: " + objects[0].Mass + "\n" +
                               "Position: " + objects[0].Position + "\n" +
                               "Velocity: " + objects[0].Velocity + "\n" +
                               "Mag. Moment: " + objects[0].MagneticMoment + "\n" +
                               "Ang. Velocity: " + objects[0].AngularVelocity + "\n" +
                               "Simulation will NOT proceed as normal.\n"
-            );
+            );*/
         }
         else
         {
