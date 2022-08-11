@@ -160,8 +160,6 @@ public partial class MainWindow : Window
             int counter = 0;
             Simulation.Calculate.runSimulation(ref objectPair,
                 dt: 0.000001,
-                momentOfInertia: o => (2.0 / 5) * o.Mass * o.Radius * o.Radius,
-                gamma: i => 6 * Math.PI * Radius * 1.002e-3,
                 callback: () =>
             {
                 unpauseEvent.Wait();
@@ -305,13 +303,6 @@ public partial class MainWindow : Window
         {
             unpauseEvent.Reset();
             PauseButton.Content = "Unpause";
-            /*Console.WriteLine("Mass: " + objects[0].Mass + "\n" +
-                              "Position: " + objects[0].Position + "\n" +
-                              "Velocity: " + objects[0].Velocity + "\n" +
-                              "Mag. Moment: " + objects[0].MagneticMoment + "\n" +
-                              "Ang. Velocity: " + objects[0].AngularVelocity + "\n" +
-                              "Simulation will NOT proceed as normal.\n"
-            );*/
         }
         else
         {

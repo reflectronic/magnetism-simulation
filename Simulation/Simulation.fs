@@ -126,7 +126,7 @@ module Calculate =
         let inline delta (initial: Vector3, acceleration: Vector3) : Vector3 =
             (initial * dt) + (acceleration * (dt ** 2.) / 2.)
             
-        let inline angleBetween (a, b) = Acos(Dot(a, b) / (a.Length * b.Length))
+        // let inline angleBetween (a, b) = Acos(Dot(a, b) / (a.Length * b.Length))
 
         let struct (o1, o2) = pair
             
@@ -136,10 +136,38 @@ module Calculate =
         // Since the radius of both balls is not the same, however, the threshold force
         // will need to be calculated independently for both.
 
-        let magneticForce = force(o1.Position - o2.Position, o1.MagneticMoment, o2.MagneticMoment)
+        let unitCubeToSphere (p: Vector3) = 
+            p * Vector3(
+                    Sqrt(1. - p.Y ** 2 / 2. - p.Z ** 2 / 2. + p.Y ** 2 * p.Z ** 2 / 3.),
+                    Sqrt(1. - p.X ** 2 / 2. - p.Z ** 2 / 2. + p.X ** 2 * p.Z ** 2 / 3.),
+                    Sqrt(1. - p.X ** 2 / 2. - p.Y ** 2 / 2. + p.X ** 2 * p.Y ** 2 / 3.))
+
+        // Arbitrary value that balances the density of points with processing time.
+        // For a sphere with a radius of 0.01, this should provide us with about 10 points
+        // from one point on the sphere to its opposite point.
+        let pointGap = 0. //o1.Radius * 2. / 9. 
+
+        let pointsLength = 1 //Round(o1.Radius * 2. / pointGap, System.MidpointRounding.AwayFromZero) |> int
+
+        let matrixLength = pointsLength * pointsLength * pointsLength
+
+        let pointMatrix = 
+            Array.init (matrixLength) (fun i -> 
+                let x = i % pointsLength
+                let y = i / pointsLength % pointsLength
+                let z = i / (pointsLength * pointsLength) % pointsLength
+
+                let indexToPos i = -o1.Radius + pointGap * i
+                Vector3(indexToPos x, indexToPos y, indexToPos z) |> unitCubeToSphere)
+            |> Seq.map (fun p -> p * o1.Radius + o1.Position)
+
+        let magneticForce = 
+            pointMatrix 
+            |> Seq.map (fun p -> force(p - o2.Position, o1.MagneticMoment / float matrixLength, o2.MagneticMoment))
+            |> Seq.sum
 
         let calculateBallDelta (magneticForce, o, otherObject) = 
-            let forceDrag = gamma.Invoke(o) * o1.Velocity;
+            let forceDrag = (6. * PI * o.Radius * 1.002e-3) * o1.Velocity;
             let acceleration: Vector3 = (magneticForce + forceDrag) / o.Mass
 
             // This isn't fully correct
@@ -154,7 +182,7 @@ module Calculate =
 
             let coefficient = ((0.01 ** 2) * o.AngularVelocity.Length) / (4. * PI * 1.004e-1);
             let angularDrag = o.AngularVelocity * coefficient
-            let angularAcceleration = (torque - angularDrag) / momentOfInertia.Invoke(o)
+            let angularAcceleration = (torque - angularDrag) / ((2. / 5.) * o.Mass * (o.Radius ** 2))
 
             let dtheta = delta(o.AngularVelocity, angularAcceleration)
 
@@ -168,4 +196,4 @@ module Calculate =
 
         pair <- struct(calculateBallDelta (magneticForce, o1, o2), calculateBallDelta (-magneticForce, o2, o1))
         
-        if callback.Invoke() then runSimulation (&pair, dt, momentOfInertia, gamma, callback) else ()
+        if callback.Invoke() then runSimulation (&pair, dt, callback) else ()
