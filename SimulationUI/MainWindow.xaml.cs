@@ -5,8 +5,6 @@
 
 using HelixToolkit.Wpf;
 
-using Microsoft.FSharp.Core;
-
 using System;
 using System.Linq;
 using System.Reflection;
@@ -31,6 +29,8 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         (Viewport.Camera as PerspectiveCamera)!.FieldOfView = 90;
+        Create_Click(null, null);
+        Begin_Click(null, null);
     }
 
     /// <summary>
@@ -173,6 +173,8 @@ public partial class MainWindow : Window
                     }
                 }
 
+                counter++;
+
                 // If o.Position does not equal itself, o.Position is NaN.
                 // At this point, the simulation is not giving us useful information, so stop simulating.
                 return objectPair.Item1.Position == objectPair.Item1.Position &&
@@ -213,7 +215,7 @@ public partial class MainWindow : Window
 
             RotateToFaceDirection((AxisAngleRotation3D)momentArrowVisualRotation.Rotation, o.MagneticMoment);
 
-            if (counter % 500 == 0)
+            if (counter % 200 == 0)
             {
                 var positionDelta = o.Position - o.PreviousPosition;
                 if (positionDelta != positionDelta || positionDelta == Vector3.Zero)
@@ -222,11 +224,8 @@ public partial class MainWindow : Window
                 }
 
                 AddPathArrow(pathArrowModels[i], o, positions);
-                //Console.WriteLine("Arrow made! #" + counter/500);
             }
         }
-
-        counter++;
 
         void AddPathArrow(GeometryModel3D pathArrowModel, Simulation.SimulatedObject o, (double X, double Y, double Z) positions)
         {
