@@ -22,29 +22,33 @@ type SimulatedObject =
 module Calculate =
     let Mu = (4. * PI * 10e-7)
 
-    //Magnetic Field
-    let B (M, r) = (Mu / (4. * PI)) * (3. * (Dot(M, r) * r) / (r.Length ** 5.) - (M / (r.Length ** 3.)))
+    // The F# pow operator calls into the CRT pow function for `float`.
+    // B is in the innermost loop of the simulation, so pow often shows up very hot in profiles.
+    // Manually writing out the multiplications avoids this problem.
+    let inline pow5 (v: float) = v * v * v * v * v
+    let inline cubed (v: float) = v * v * v
+    let inline squared (v: float) = v * v
 
-    //Potential
+    let B (M, r) = (Mu / (4. * PI)) * (3. * (Dot(M, r) * r) / (r.Length |> pow5) - (M / (r.Length |> cubed)))
+
     let inline U (m, B) = Dot(-m, B)
 
     let inline torque (m, B) = Cross(m, B)
 
-    type Dimension = 
-        | X 
-        | Y 
+    [<Struct>]
+    type private Dimension = 
+        | X
+        | Y
         | Z
 
-    let force (position: Vector3D<float>, m, M) = 
+    let force (position: Vector3, m, M) = 
         let inline product upperBound exclusions fn =
             let mutable partialProduct = 1.
             for i = 0 to upperBound do
                 let struct (exclusion1, exclusion2) = exclusions
-
                 if exclusion1 <> i && exclusion2 <> i then
                     partialProduct <- partialProduct * fn i
-                else 
-                    ()
+
             partialProduct
 
         let inline sum upperBound exclusion fn =
@@ -52,8 +56,7 @@ module Calculate =
             for i = 0 to upperBound do
                 if i <> exclusion then
                     partialSum <- partialSum + fn i
-                else 
-                    ()
+                
             partialSum
 
         // We use a polynomial interpolation to estimate the gradient of the potentials.
@@ -85,36 +88,37 @@ module Calculate =
 
             let denominator = product n (j, -1) (fun k -> x.[j] - x.[k]);
             float numerator / float denominator
-        
-        let L' (yVals, dx) = 
-            let inline vectorMap fn (v: Vector3) =
-                Vector3(fn 0 v.X, fn 1 v.Y, fn 2 v.Z)
+           
+        let inline project fn v = 
+            let struct(x, y, z) = v
+            struct(fn 0 x, fn 1 y, fn 2 z)
 
-            let inline vectorSum (v: Vector3) = 
-                v.X + v.Y + v.Z
+        let L' (yVals, dx) = 
+            let inline sum v =
+                let struct(x, y, z) = v
+                x + y + z
 
             yVals 
-            |> vectorMap (fun i y -> y * float (l'(i, dx))) 
-            |> vectorSum
-                    
+            |> project (fun i y -> y * float (l'(i, dx))) 
+            |> sum
+          
         let approximateGradient (pos: Vector3, dimension) =
             let currentPosition = match dimension with 
                                   | X -> pos.X
                                   | Y -> pos.Y
                                   | Z -> pos.Z
             
-            let dx = 0.0001 // I made this smaller for more acccuracy
-            let positionGradient = [| currentPosition - dx; currentPosition; currentPosition + dx |]
+            let dx = 0.0001 
+            let positionGradient = struct(currentPosition - dx, currentPosition, currentPosition + dx)
 
-            let radii = positionGradient |> Array.map (fun p -> 
-                match dimension with
-                | X -> Vector3(p, pos.Y, pos.Z)
-                | Y -> Vector3(pos.X, p, pos.Z)
-                | Z -> Vector3(pos.X, pos.Y, p))
+            let potentials = positionGradient |> project (fun _ p -> 
+                let radius = match dimension with
+                             | X -> Vector3(p, pos.Y, pos.Z)
+                             | Y -> Vector3(pos.X, p, pos.Z)
+                             | Z -> Vector3(pos.X, pos.Y, p)
+                U(m, B(M, radius)))
 
-            let potentials = radii |> Array.map (fun r -> U(m, B(M, r)))
-
-            L'(Vector3(potentials.[0], potentials.[1], potentials.[2]), dx)
+            L'(potentials, dx)
 
         -Vector3(approximateGradient(position, X), approximateGradient(position, Y), approximateGradient(position, Z))
 
@@ -126,7 +130,7 @@ module Calculate =
             
         // let inline angleBetween (a, b) = Acos(Dot(a, b) / (a.Length * b.Length))
 
-        let struct (o1, o2) = pair
+        let struct(o1, o2) = pair
             
         // The net force applied on both objects is the same (Newton's third law).
         // We can calculate the force applied to o1 as a result of o2's magnetic field,
