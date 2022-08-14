@@ -3,9 +3,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.2.32408.312
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Simulation", "Simulation\Simulation.fsproj", "{9E403722-AB2F-4415-BEC6-1EDE5E081299}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Simulation", "Simulation\Simulation.fsproj", "{9E403722-AB2F-4415-BEC6-1EDE5E081299}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimulationUI", "SimulationUI\SimulationUI.csproj", "{B37127CB-02F5-4BD2-82E0-120CE3995458}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SimulationUI", "SimulationUI\SimulationUI.csproj", "{B37127CB-02F5-4BD2-82E0-120CE3995458}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimulationConsole", "SimulationConsole\SimulationConsole.csproj", "{387424D4-6B1B-4F9A-A558-0EF9DC8546DD}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +23,10 @@ Global
 		{B37127CB-02F5-4BD2-82E0-120CE3995458}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B37127CB-02F5-4BD2-82E0-120CE3995458}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B37127CB-02F5-4BD2-82E0-120CE3995458}.Release|Any CPU.Build.0 = Release|Any CPU
+		{387424D4-6B1B-4F9A-A558-0EF9DC8546DD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{387424D4-6B1B-4F9A-A558-0EF9DC8546DD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{387424D4-6B1B-4F9A-A558-0EF9DC8546DD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{387424D4-6B1B-4F9A-A558-0EF9DC8546DD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

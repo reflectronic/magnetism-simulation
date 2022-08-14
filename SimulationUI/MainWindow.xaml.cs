@@ -54,21 +54,22 @@ public partial class MainWindow : Window
         .Select(a => (Color)a.GetValue(null))
         .ToArray();
 
-    static readonly Vector3 InitialPosition = new(-0.2, +0.3, -0.15);
+    static readonly Vector3 initialPosition = new(-0.2, +0.3, -0.15);
+
+    static readonly Vector3 initialMagneticMomentSmall = new(0, 0, -1);
+    static readonly Vector3 initialMagneticMomentBig = new(0, 0, 3);
 
 
     const double Radius = 0.01;
     const double Mass = 0.003;
 
     (Simulation.SimulatedObject, Simulation.SimulatedObject) objectPair = (
-        new(InitialPosition, InitialPosition, Vector3.Zero, Vector3.Zero, initialMagneticMomentSmall, Mass * 10, Radius),
+        new(initialPosition, initialPosition, Vector3.Zero, Vector3.Zero, initialMagneticMomentSmall, Mass * 10, Radius),
         new(Vector3.Zero, Vector3.Zero, Vector3.Zero, Vector3.Zero, initialMagneticMomentBig, Mass, Radius)
     );
 
     double periodMsec;
 
-    static readonly Vector3 initialMagneticMomentSmall = new(0, 0, -1);
-    static readonly Vector3 initialMagneticMomentBig = new(0, 0, 3);
 
     private void Create_Click(object sender, RoutedEventArgs e)
     {
