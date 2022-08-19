@@ -14,12 +14,9 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 
-/*using static Silk.NET.Maths.Vector3D;
+using static Silk.NET.Maths.Vector3D;
 
-using Vector3 = Silk.NET.Maths.Vector3D<float>;*/
-using static System.Numerics.Vector3;
-
-using Vector3 = System.Numerics.Vector3;
+using Vector3 = Silk.NET.Maths.Vector3D<double>;
 
 namespace SimulationUI;
 
@@ -57,7 +54,7 @@ public partial class MainWindow : Window
         .Select(a => (Color)a.GetValue(null))
         .ToArray();
 
-    static readonly Vector3 initialPosition = new(-0.2f, +0.3f, -0.15f);
+    static readonly Vector3 initialPosition = new(-0.2, +0.3, -0.15);
 
     static readonly Vector3 initialMagneticMomentSmall = new(0, 0, -1);
     static readonly Vector3 initialMagneticMomentBig = new(0, 0, 3);
@@ -169,10 +166,10 @@ public partial class MainWindow : Window
     void SetThing()
     {
         externalField = objectPair.Item1.Position - objectPair.Item2.Position;
-        perpendicularExternalField = Vector3.Cross(externalField, new(0, 0, 1));
+        perpendicularExternalField = Cross(externalField, new(0, 0, 1));
         if (engageThePerpendicularity)
         {
-            externalField = Vector3.Cross(externalField, perpendicularExternalField);
+            externalField = Cross(externalField, perpendicularExternalField);
         }
     }
 
