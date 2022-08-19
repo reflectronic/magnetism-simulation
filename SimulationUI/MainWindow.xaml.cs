@@ -48,6 +48,8 @@ public partial class MainWindow : Window
 
     GeometryModel3D[] pathArrowModels;
 
+    ModelVisual3D externalFieldArrow;
+
     readonly ManualResetEventSlim unpauseEvent = new(initialState: true /* signaled */, spinCount: 0);
     
     readonly Color[] colors = typeof(Colors).GetProperties(BindingFlags.Public | BindingFlags.Static)
@@ -60,6 +62,9 @@ public partial class MainWindow : Window
     static readonly Vector3 initialMagneticMomentSmall = new(0, 0, -1);
     static readonly Vector3 initialMagneticMomentBig = new(0, 0, 3);
 
+    Vector3 externalField;
+    Vector3 perpendicularExternalField;
+    bool engageThePerpendicularity;
 
     const float Radius = 0.01f;
     const float Mass = 0.003f;
@@ -74,6 +79,20 @@ public partial class MainWindow : Window
 
     private void Create_Click(object sender, RoutedEventArgs e)
     {
+        static GeometryModel3D CreateFrozenModel(MeshBuilder builder, Brush brush)
+        {
+            brush.Freeze();
+            Material material = new DiffuseMaterial(brush);
+            material.Freeze();
+
+            var mesh = builder.ToMesh(freeze: true);
+            var model = new GeometryModel3D(mesh, material);
+            model.Freeze();
+
+            return model;
+        }
+
+
         CreateResourcesButton.IsEnabled = false;
         
         var sphereBuilder = new MeshBuilder();
@@ -81,6 +100,8 @@ public partial class MainWindow : Window
 
         var momentArrowBuilder = new MeshBuilder();
         momentArrowBuilder.AddArrow(new(0, 0, -3), new(0, 0, 3), 0.4);
+
+        var momentArrowModel = CreateFrozenModel(momentArrowBuilder, new SolidColorBrush(Colors.Indigo));
 
         var pathArrowBuilder = new MeshBuilder();
         pathArrowBuilder.AddArrow(new(0, 0, -1), new(0, 0, 1), 0.2);
@@ -95,23 +116,8 @@ public partial class MainWindow : Window
         {
             var randomColor = colors[Random.Shared.Next(colors.Length)];
 
-            static GeometryModel3D CreateFrozenModel(MeshBuilder builder, Brush brush)
-            {
-                brush.Freeze();
-                Material material = new DiffuseMaterial(brush);
-                material.Freeze();
-
-                var mesh = builder.ToMesh(freeze: true);
-                var model = new GeometryModel3D(mesh, material);
-                model.Freeze();
-
-                return model;
-            }
-
             var sphereModel = CreateFrozenModel(sphereBuilder, new SolidColorBrush(randomColor) { Opacity = 0.75 });
-            var momentArrowModel = CreateFrozenModel(momentArrowBuilder, new SolidColorBrush(Colors.Indigo));
             var pathArrowModel = CreateFrozenModel(pathArrowBuilder, new SolidColorBrush(randomColor.ChangeIntensity(0.8)) { Opacity = 0.25 });
-
 
             var visualRadius = 1; // ((Simulation.SimulatedObject)objects[i]).Radius * 100;
             balls[i] = new ModelVisual3D
@@ -152,6 +158,22 @@ public partial class MainWindow : Window
         {
             Viewport.Children.Add(smallMomentArrow);
         }
+
+        Viewport.Children.Add(externalFieldArrow = new ModelVisual3D
+        {
+            Content = momentArrowModel,
+            Transform = new RotateTransform3D(new AxisAngleRotation3D())
+        });
+    }
+
+    void SetThing()
+    {
+        externalField = objectPair.Item1.Position - objectPair.Item2.Position;
+        perpendicularExternalField = Vector3.Cross(externalField, new(0, 0, 1));
+        if (engageThePerpendicularity)
+        {
+            externalField = Vector3.Cross(externalField, perpendicularExternalField);
+        }
     }
 
     private void Begin_Click(object sender, RoutedEventArgs e)
@@ -159,12 +181,16 @@ public partial class MainWindow : Window
         BeginSimulationButton.IsEnabled = false;
         void ThreadStart()
         {
+            SetThing();
             int counter = 0;
             Simulation.Calculate.runSimulation(ref objectPair,
                 dt: 0.000001f,
+                externalField,
                 callback: () =>
             {
                 unpauseEvent.Wait();
+
+                SetThing();
 
                 if (counter % 10 == 0)
                 {
@@ -177,7 +203,7 @@ public partial class MainWindow : Window
 
                 counter++;
 
-                // If o.Position does not equal itself, o.Position is NaN.
+                // If o.Position does not equal itself, o.Position is NaN.  
                 // At this point, the simulation is not giving us useful information, so stop simulating.
                 return objectPair.Item1.Position == objectPair.Item1.Position &&
                        objectPair.Item2.Position == objectPair.Item2.Position;
@@ -216,6 +242,8 @@ public partial class MainWindow : Window
             (momentArrowVisualTranslation.OffsetX, momentArrowVisualTranslation.OffsetY, momentArrowVisualTranslation.OffsetZ) = positions;
 
             RotateToFaceDirection((AxisAngleRotation3D)momentArrowVisualRotation.Rotation, o.MagneticMoment);
+
+            RotateToFaceDirection((AxisAngleRotation3D)((RotateTransform3D)externalFieldArrow.Transform).Rotation, externalField);
 
             if (counter % 200 == 0)
             {
@@ -310,5 +338,10 @@ public partial class MainWindow : Window
             unpauseEvent.Set();
             PauseButton.Content = "Pause";
         }
+    }
+
+    private void Flip_Click(object sender, RoutedEventArgs e)
+    {
+        engageThePerpendicularity = !engageThePerpendicularity;
     }
 }

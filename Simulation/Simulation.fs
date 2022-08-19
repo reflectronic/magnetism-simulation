@@ -121,6 +121,7 @@ module Calculate =
 
     let rec runSimulation (pair: byref<struct (SimulatedObject * SimulatedObject)>, 
                            dt: float32, 
+                           externalField: inref<Vector3>,
                            callback: System.Func<bool>) =
         let inline delta (initial: Vector3, acceleration: Vector3) : Vector3 =
             (initial * dt) + (acceleration * (dt * dt) / 2f)
@@ -144,9 +145,9 @@ module Calculate =
         // Arbitrary value that balances the density of points with processing time.
         // For a sphere with a radius of 0.01, this should provide us with about 10 points
         // from one point on the sphere to its opposite point.
-        let pointGap = o1.Radius * 2f / 5f
+        let pointGap = 0f//o1.Radius * 2f / 5f
 
-        let pointsLength = Round(o1.Radius * 2f / pointGap, System.MidpointRounding.AwayFromZero) |> int
+        let pointsLength = 1//Round(o1.Radius * 2f / pointGap, System.MidpointRounding.AwayFromZero) |> int
 
         let matrixLength = pointsLength * pointsLength * pointsLength
         
@@ -165,7 +166,7 @@ module Calculate =
                     Zero)
             |> Array.sum
 
-        let calculateBallDelta (magneticForce, o, otherObject) =
+        let calculateBallDelta (magneticForce, o, otherObject, externalField) =
             let forceDrag = (6f * PI * o.Radius * 1.002e-3f) * o1.Velocity;
             let acceleration: Vector3 = (magneticForce + forceDrag) / o.Mass
 
@@ -177,7 +178,7 @@ module Calculate =
             //     by a certain amount (the projection, probably)
             //   - We can also create "tunnel cylinders" to demarkate the torn medium and diretion, and use those
                 
-            let torque = torque(o.MagneticMoment, B(otherObject.MagneticMoment, o.Position - otherObject.Position))
+            let torque = torque(o.MagneticMoment, B(otherObject.MagneticMoment, o.Position - otherObject.Position) + externalField)
 
             let coefficient = ((0.01f * 0.01f) * o.AngularVelocity.Length()) / (4f * PI * 1.004e-1f);
             let angularDrag = o.AngularVelocity * coefficient
@@ -193,6 +194,6 @@ module Calculate =
                 AngularVelocity = o.AngularVelocity + angularAcceleration * dt
             }
 
-        pair <- struct(calculateBallDelta (magneticForce, o1, o2), calculateBallDelta (-magneticForce, o2, o1))
+        pair <- struct(calculateBallDelta (magneticForce, o1, o2, externalField), calculateBallDelta (-magneticForce, o2, o1, externalField))
         
-        if callback.Invoke() then runSimulation (&pair, dt, callback) else ()
+        if callback.Invoke() then runSimulation (&pair, dt, &externalField, callback) else ()
