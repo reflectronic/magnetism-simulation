@@ -14,9 +14,12 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 
-using static Silk.NET.Maths.Vector3D;
+/*using static Silk.NET.Maths.Vector3D;
 
-using Vector3 = Silk.NET.Maths.Vector3D<double>;
+using Vector3 = Silk.NET.Maths.Vector3D<float>;*/
+using static System.Numerics.Vector3;
+
+using Vector3 = System.Numerics.Vector3;
 
 namespace SimulationUI;
 
@@ -29,8 +32,6 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         (Viewport.Camera as PerspectiveCamera)!.FieldOfView = 90;
-        Create_Click(null, null);
-        Begin_Click(null, null);
     }
 
     /// <summary>
@@ -54,14 +55,14 @@ public partial class MainWindow : Window
         .Select(a => (Color)a.GetValue(null))
         .ToArray();
 
-    static readonly Vector3 initialPosition = new(-0.2, +0.3, -0.15);
+    static readonly Vector3 initialPosition = new(-0.2f, +0.3f, -0.15f);
 
     static readonly Vector3 initialMagneticMomentSmall = new(0, 0, -1);
     static readonly Vector3 initialMagneticMomentBig = new(0, 0, 3);
 
 
-    const double Radius = 0.01;
-    const double Mass = 0.003;
+    const float Radius = 0.01f;
+    const float Mass = 0.003f;
 
     (Simulation.SimulatedObject, Simulation.SimulatedObject) objectPair = (
         new(initialPosition, initialPosition, Vector3.Zero, Vector3.Zero, initialMagneticMomentSmall, Mass * 10, Radius),
@@ -160,7 +161,7 @@ public partial class MainWindow : Window
         {
             int counter = 0;
             Simulation.Calculate.runSimulation(ref objectPair,
-                dt: 0.000001,
+                dt: 0.000001f,
                 callback: () =>
             {
                 unpauseEvent.Wait();

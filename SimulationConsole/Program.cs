@@ -1,12 +1,12 @@
-﻿using Vector3 = Silk.NET.Maths.Vector3D<double>;
+﻿using System.Numerics;
 
-var initialPosition = new Vector3(-0.2, +0.3, -0.15);
+var initialPosition = new Vector3(-0.2f, +0.3f, -0.15f);
 
 var initialMagneticMomentSmall = new Vector3(0, 0, -1);
 var initialMagneticMomentBig = new Vector3(0, 0, 3);
 
-const double Radius = 0.01;
-const double Mass = 0.003;
+const float Radius = 0.01f;
+const float Mass = 0.003f;
 
 var objectPair = (
     new Simulation.SimulatedObject(initialPosition, initialPosition, Vector3.Zero, Vector3.Zero, initialMagneticMomentSmall, Mass * 10, Radius),
@@ -15,7 +15,7 @@ var objectPair = (
 
 int count = 0;
 
-Simulation.Calculate.runSimulation(ref objectPair, 0.000001, () =>
+Simulation.Calculate.runSimulation(ref objectPair, 0.000001f, () =>
 {
 #if DEBUG
     count++;

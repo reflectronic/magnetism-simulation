@@ -1,11 +1,8 @@
 ﻿namespace Simulation
 
-open Silk.NET.Maths
-open type Silk.NET.Maths.Vector3D
-open type Vector3D<float>
-open type System.Math
-
-type Vector3 = Silk.NET.Maths.Vector3D<float>
+open System.Numerics
+open type System.Numerics.Vector3
+open type System.MathF
 
 [<Struct>]
 type SimulatedObject = 
@@ -15,21 +12,21 @@ type SimulatedObject =
         Velocity: Vector3;
         AngularVelocity: Vector3;
         MagneticMoment: Vector3;
-        Mass: float;
-        Radius: float
+        Mass: float32;
+        Radius: float32
     }
 
 module Calculate =
-    let Mu = (4. * PI * 10e-7)
+    let Mu = (4f * PI * 10e-7f)
 
     // The F# pow operator calls into the CRT pow function for `float`.
     // B is in the innermost loop of the simulation, so pow often shows up very hot in profiles.
     // Manually writing out the multiplications avoids this problem.
-    let inline pow5 (v: float) = v * v * v * v * v
-    let inline cubed (v: float) = v * v * v
-    let inline squared (v: float) = v * v
+    let inline pow5 v = v * v * v * v * v
+    let inline cubed v = v * v * v
+    let inline squared v = v * v
 
-    let B (M, r) = (Mu / (4. * PI)) * (3. * (Dot(M, r) * r) / (r.Length |> pow5) - (M / (r.Length |> cubed)))
+    let B (M, r) = (Mu / (4f * PI)) * (3f * (Dot(M, r) * r) / (r.Length() |> pow5) - (M / (r.Length() |> cubed)))
 
     let inline U (m, B) = Dot(-m, B)
 
@@ -43,7 +40,7 @@ module Calculate =
 
     let force (position: Vector3, m, M) = 
         let inline product upperBound exclusions fn =
-            let mutable partialProduct = 1.
+            let mutable partialProduct = 1f
             for i = 0 to upperBound do
                 let struct (exclusion1, exclusion2) = exclusions
                 if exclusion1 <> i && exclusion2 <> i then
@@ -52,7 +49,7 @@ module Calculate =
             partialProduct
 
         let inline sum upperBound exclusion fn =
-            let mutable partialSum = 0.
+            let mutable partialSum = 0f
             for i = 0 to upperBound do
                 if i <> exclusion then
                     partialSum <- partialSum + fn i
@@ -80,14 +77,14 @@ module Calculate =
         //                𝑘=0, 𝑘≠𝑗 
 
         // We always take the derivative at 𝑥 = 0.
-        let l' (j, dx: float) = 
+        let l' (j, dx) = 
             let n = 2
-            let x = Vector3(-dx, 0, dx)
+            let x = Vector3(-dx, 0f, dx)
             let numerator = (sum n j 
-                (fun k -> product n (k, j) (fun l -> 0. - x.[l]))) 
+                (fun k -> product n (k, j) (fun l -> 0f - x.[l]))) 
 
             let denominator = product n (j, -1) (fun k -> x.[j] - x.[k]);
-            float numerator / float denominator
+            float32 numerator / float32 denominator
            
         let inline project fn v = 
             let struct(x, y, z) = v
@@ -99,7 +96,7 @@ module Calculate =
                 x + y + z
 
             yVals 
-            |> project (fun i y -> y * float (l'(i, dx))) 
+            |> project (fun i y -> y * float32 (l'(i, dx))) 
             |> sum
           
         let approximateGradient (pos: Vector3, dimension) =
@@ -108,7 +105,7 @@ module Calculate =
                                   | Y -> pos.Y
                                   | Z -> pos.Z
             
-            let dx = 0.0001 
+            let dx = 0.0001f
             let positionGradient = struct(currentPosition - dx, currentPosition, currentPosition + dx)
 
             let potentials = positionGradient |> project (fun _ p -> 
@@ -123,10 +120,10 @@ module Calculate =
         -Vector3(approximateGradient(position, X), approximateGradient(position, Y), approximateGradient(position, Z))
 
     let rec runSimulation (pair: byref<struct (SimulatedObject * SimulatedObject)>, 
-                           dt: float, 
+                           dt: float32, 
                            callback: System.Func<bool>) =
         let inline delta (initial: Vector3, acceleration: Vector3) : Vector3 =
-            (initial * dt) + (acceleration * (dt * dt) / 2.)
+            (initial * dt) + (acceleration * (dt * dt) / 2f)
             
         // let inline angleBetween (a, b) = Acos(Dot(a, b) / (a.Length * b.Length))
 
@@ -140,33 +137,36 @@ module Calculate =
 
         let unitCubeToSphere (p: Vector3) = 
             p * Vector3(
-                    Sqrt(1. - p.Y ** 2 / 2. - p.Z ** 2 / 2. + p.Y ** 2 * p.Z ** 2 / 3.),
-                    Sqrt(1. - p.X ** 2 / 2. - p.Z ** 2 / 2. + p.X ** 2 * p.Z ** 2 / 3.),
-                    Sqrt(1. - p.X ** 2 / 2. - p.Y ** 2 / 2. + p.X ** 2 * p.Y ** 2 / 3.))
+                    Sqrt(1f - p.Y ** 2f / 2f - p.Z ** 2f / 2f + p.Y ** 2f * p.Z ** 2f / 3f),
+                    Sqrt(1f - p.X ** 2f / 2f - p.Z ** 2f / 2f + p.X ** 2f * p.Z ** 2f / 3f),
+                    Sqrt(1f - p.X ** 2f / 2f - p.Y ** 2f / 2f + p.X ** 2f * p.Y ** 2f / 3f))
 
         // Arbitrary value that balances the density of points with processing time.
         // For a sphere with a radius of 0.01, this should provide us with about 10 points
         // from one point on the sphere to its opposite point.
-        let pointGap = o1.Radius * 2. / 5.
+        let pointGap = o1.Radius * 2f / 5f
 
-        let pointsLength = Round(o1.Radius * 2. / pointGap, System.MidpointRounding.AwayFromZero) |> int
+        let pointsLength = Round(o1.Radius * 2f / pointGap, System.MidpointRounding.AwayFromZero) |> int
 
         let matrixLength = pointsLength * pointsLength * pointsLength
-
+        
         let magneticForce = 
-            Array.Parallel.init matrixLength (fun i -> 
-                let x = i % pointsLength
-                let y = i / pointsLength % pointsLength
-                let z = i / (pointsLength * pointsLength) % pointsLength
+            Array.init matrixLength (fun i -> 
+                let x = i % pointsLength |> float32
+                let y = i / pointsLength % pointsLength  |> float32
+                let z = i / (pointsLength * pointsLength) % pointsLength  |> float32
 
                 let indexToPos i = -o1.Radius + pointGap * i
-                let unitPosition = Vector3(indexToPos x, indexToPos y, indexToPos z) |> unitCubeToSphere
-                let p = unitPosition * o1.Radius + o1.Position
-                force(p - o2.Position, o1.MagneticMoment / float matrixLength, o2.MagneticMoment))
-             |> Seq.sum
+                let unitPosition = Vector3(indexToPos x, indexToPos y, indexToPos z) //|> unitCubeToSphere 
+                if unitPosition.Length() <= 1f then 
+                    let p = unitPosition * o1.Radius + o1.Position
+                    force(p - o2.Position, o1.MagneticMoment / float32 matrixLength, o2.MagneticMoment)
+                else 
+                    Zero)
+            |> Array.sum
 
         let calculateBallDelta (magneticForce, o, otherObject) =
-            let forceDrag = (6. * PI * o.Radius * 1.002e-3) * o1.Velocity;
+            let forceDrag = (6f * PI * o.Radius * 1.002e-3f) * o1.Velocity;
             let acceleration: Vector3 = (magneticForce + forceDrag) / o.Mass
 
             // This isn't fully correct
@@ -179,9 +179,9 @@ module Calculate =
                 
             let torque = torque(o.MagneticMoment, B(otherObject.MagneticMoment, o.Position - otherObject.Position))
 
-            let coefficient = ((0.01 * 0.01) * o.AngularVelocity.Length) / (4. * PI * 1.004e-1);
+            let coefficient = ((0.01f * 0.01f) * o.AngularVelocity.Length()) / (4f * PI * 1.004e-1f);
             let angularDrag = o.AngularVelocity * coefficient
-            let angularAcceleration = (torque - angularDrag) / ((2. / 5.) * o.Mass * (o.Radius * o.Radius))
+            let angularAcceleration = (torque - angularDrag) / ((2f / 5f) * o.Mass * (o.Radius * o.Radius))
 
             let dtheta = delta(o.AngularVelocity, angularAcceleration)
 
@@ -189,7 +189,7 @@ module Calculate =
                 PreviousPosition = o.Position
                 Position = o.Position + delta(o.Velocity, acceleration)
                 Velocity = o.Velocity + acceleration * dt
-                MagneticMoment = Transform(o.MagneticMoment, Quaternion.CreateFromAxisAngle(Normalize(dtheta), dtheta.Length))
+                MagneticMoment = Transform(o.MagneticMoment, Quaternion.CreateFromAxisAngle(Normalize(dtheta), dtheta.Length()))
                 AngularVelocity = o.AngularVelocity + angularAcceleration * dt
             }
 
