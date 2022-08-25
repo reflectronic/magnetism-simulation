@@ -5,6 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Vectors.fs" />
     <Compile Include="Simulation.fs" />
   </ItemGroup>
 

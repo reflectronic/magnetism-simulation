@@ -1,0 +1,61 @@
+﻿module Vectors
+
+[<Struct>]
+type Vector3<[<Measure>] 'T> =
+    val X: float<'T>;
+    val Y: float<'T>;
+    val Z: float<'T>;
+
+    new(x, y, z) = { X = x; Y = y; Z = z }
+
+    static member (+) (left: Vector3<'T>, right: Vector3<'T>) =
+        Vector3(left.X + right.X, left.Y + right.Y, left.Z + right.Z);
+
+    static member (-) (left: Vector3<'T>, right: Vector3<'T>) =
+        Vector3(left.X - right.X, left.Y - right.Y, left.Z - right.Z);
+
+    static member (*) (vector: Vector3<'T>, scalar: float<_>) =
+        Vector3(vector.X * scalar, vector.Y * scalar, vector.Z * scalar);
+
+    static member (*) (scalar: float<_>, vector: Vector3<'T>) =
+        Vector3(vector.X * scalar, vector.Y * scalar, vector.Z * scalar);
+
+    static member (/) (vector: Vector3<'T>, scalar: float<_>) =
+        Vector3(vector.X / scalar, vector.Y / scalar, vector.Z / scalar);
+
+    static member op_Equality (left: Vector3<'T>, right: Vector3<'T>) =
+        left.X = right.X && left.Y = right.Y && left.Z = right.Z
+
+    static member op_Inequality (left: Vector3<'T>, right: Vector3<'T>) =
+        not (left = right)
+
+    static member (~-) (vector: Vector3<'T>) =
+        Vector3(-vector.X, -vector.Y, -vector.Z)
+
+    static member Zero = 
+        Unchecked.defaultof<Vector3<'T>>
+
+    member this.Item
+        with get(i: int) = match i with
+                           | 0 -> this.X
+                           | 1 -> this.Y
+                           | 2 -> this.Z
+                           | _ -> invalidArg (nameof i) "Invalid index"
+
+
+let Dot(left: Vector3<'L>, right: Vector3<'R>) =
+        (left.X * right.X) + (left.Y * right.Y) + (left.Z * right.Z);
+
+let Cross(left: Vector3<'L>, right: Vector3<'R>) =
+        Vector3((left.Y * right.Z) - (left.Z * right.Y),
+                (left.Z * right.X) - (left.X * right.Z),
+                (left.X * right.Y) - (left.Y * right.X))
+
+let Length(vector: Vector3<'T>) =
+    Dot(vector, vector) |> sqrt
+
+let StripUnits(vector: Vector3<'T>) =
+    Vector3(float vector.X, float vector.Y, float vector.Z)
+
+let Normalize(vector: Vector3<'T>) = 
+    vector / Length(vector)

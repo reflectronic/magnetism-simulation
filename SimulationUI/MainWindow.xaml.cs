@@ -14,9 +14,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 
-using static Silk.NET.Maths.Vector3D;
-
-using Vector3 = Silk.NET.Maths.Vector3D<double>;
+using static Vectors;
 
 namespace SimulationUI;
 
@@ -300,17 +298,17 @@ public partial class MainWindow : Window
 
             if (Math.Sign(directionA.X) != Math.Sign(directionB.X))
             {
-                rotationAxis.Y = 1;
+                rotationAxis = new Vector3(rotationAxis.X, 1, rotationAxis.Z);
             }
 
             if (Math.Sign(directionA.Y) != Math.Sign(directionB.Y))
             {
-                rotationAxis.Z = 1;
+                rotationAxis = new Vector3(rotationAxis.X, rotationAxis.Y, 1);
             }
 
             if (Math.Sign(directionA.Z) != Math.Sign(directionB.Z))
             {
-                rotationAxis.X = 1;
+                rotationAxis = new Vector3(1, rotationAxis.Y, rotationAxis.Z);
             }
         }
 
