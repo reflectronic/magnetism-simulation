@@ -1,6 +1,7 @@
 ﻿module Vectors
 
 [<Struct>]
+[<System.Diagnostics.DebuggerDisplay("(X = {X}, Y = {Y}, Z = {Z})")>]
 type Vector3<[<Measure>] 'T> =
     val X: float<'T>;
     val Y: float<'T>;
@@ -41,6 +42,9 @@ type Vector3<[<Measure>] 'T> =
                            | 1 -> this.Y
                            | 2 -> this.Z
                            | _ -> invalidArg (nameof i) "Invalid index"
+
+    override this.ToString() = 
+        $"(X = {this.X}, Y = {this.Y}, Z = {this.Z})"
 
 
 let Dot(left: Vector3<'L>, right: Vector3<'R>) =

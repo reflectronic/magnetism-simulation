@@ -196,13 +196,17 @@ module Calculate =
             let dtheta = delta(o.AngularVelocity, angularAcceleration)
 
             // TODO: write our own quaternion transform
-            let transform =
-                let silkVector = Silk.NET.Maths.Vector3D(o.MagneticMoment.X, o.MagneticMoment.Y, o.MagneticMoment.Z)
-                let silkDtheta = Silk.NET.Maths.Vector3D(FloatWithMeasure dtheta.X, FloatWithMeasure dtheta.Y, FloatWithMeasure dtheta.Z)
-                let silkTransformed = Silk.NET.Maths.Vector3D.Transform(
-                    silkVector,
-                    Silk.NET.Maths.Quaternion.CreateFromAxisAngle(Silk.NET.Maths.Vector3D.Normalize(silkDtheta), silkDtheta.Length))
-                Vector3(silkTransformed.X, silkTransformed.Y, silkTransformed.Z)
+            let transform = 
+                if dtheta <> Vector3.Zero then
+                    let silkVector = Silk.NET.Maths.Vector3D(o.MagneticMoment.X, o.MagneticMoment.Y, o.MagneticMoment.Z)
+                    let silkDtheta = Silk.NET.Maths.Vector3D(FloatWithMeasure dtheta.X, FloatWithMeasure dtheta.Y, FloatWithMeasure dtheta.Z)
+                    let silkTransformed = Silk.NET.Maths.Vector3D.Transform(
+                        silkVector,
+                        Silk.NET.Maths.Quaternion.CreateFromAxisAngle(Silk.NET.Maths.Vector3D.Normalize(silkDtheta), silkDtheta.Length))
+                    assert(silkTransformed = silkTransformed)
+                    Vector3(silkTransformed.X, silkTransformed.Y, silkTransformed.Z)
+                else 
+                    o.MagneticMoment
 
             { o with
                 PreviousPosition = o.Position

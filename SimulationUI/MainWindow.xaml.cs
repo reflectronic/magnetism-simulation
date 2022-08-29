@@ -6,6 +6,7 @@
 using HelixToolkit.Wpf;
 
 using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -52,9 +53,9 @@ public partial class MainWindow : Window
         .Select(a => (Color)a.GetValue(null))
         .ToArray();
 
-    static readonly Vector3 initialPosition = new(-0.2, +0.3, -0.15);
-
-    static readonly Vector3 initialMagneticMomentSmall = new(0, 0, -1);
+    static readonly Vector3 initialPosition = new(0, 0, 0.5);
+    
+    static readonly Vector3 initialMagneticMomentSmall = new(0, 0, 1);
     static readonly Vector3 initialMagneticMomentBig = new(0, 0, 3);
 
     Vector3 externalField;
@@ -169,6 +170,8 @@ public partial class MainWindow : Window
         {
             externalField = Cross(externalField, perpendicularExternalField);
         }
+
+        externalField = Normalize(externalField) * 50;
     }
 
     private void Begin_Click(object sender, RoutedEventArgs e)
