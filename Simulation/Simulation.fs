@@ -12,9 +12,7 @@ open type System.Math
 [<Struct>]
 type SimulatedObject = 
     { 
-        PreviousPosition: Vector3<m>;
         Position: Vector3<m>;
-        Velocity: Vector3<m/s>;
         AngularVelocity: Vector3<1/s>;
         MagneticMoment: Vector3<A m^2>;
         Mass: float<kg>;
@@ -129,13 +127,9 @@ module Calculate =
     let rec runSimulation (pair: byref<struct (SimulatedObject * SimulatedObject)>, 
                            dt: float<s>, 
                            externalBField: inref<Vector3<T>>,
+                           isExpanding: System.Func<bool>,
                            callback: System.Func<bool>) =
-        let inline delta (initial: Vector3<'u/s>, acceleration: Vector3<'u/s^2>) = 
-            (initial * dt) + (acceleration * (dt |> squared) * 0.5)
-            
-        // let inline angleBetween (a, b) = Acos(Dot(a, b) / (a.Length * b.Length))
-
-        let struct(o1, o2) = pair
+        let struct(l, s) = pair
             
         // The net force applied on both objects is the same (Newton's third law).
         // We can calculate the force applied to o1 as a result of o2's magnetic field,
@@ -152,70 +146,77 @@ module Calculate =
 
         let matrixLength = pointsLength * pointsLength * pointsLength
         
-        let magneticForce = 
+        let largeMagneticForce = 
             Array.init matrixLength (fun i -> 
                 let x = i % pointsLength |> float
                 let y = i / pointsLength % pointsLength |> float
                 let z = i / (pointsLength * pointsLength) % pointsLength |> float
 
-                let indexToPos i = -o1.Radius + pointGap * i
+                let indexToPos i = -l.Radius + pointGap * i
                 let unitPosition = Vector3(indexToPos x, indexToPos y, indexToPos z) 
                 if Length(unitPosition) <= 1.<m> then 
-                    let p = unitPosition * float o1.Radius + o1.Position
-                    magneticForce(p - o2.Position, o1.MagneticMoment / float matrixLength, o2.MagneticMoment)
+                    let p = unitPosition * float l.Radius + l.Position
+                    magneticForce(p - s.Position, l.MagneticMoment / float matrixLength, s.MagneticMoment)
                 else 
                     Vector3.Zero)
             |> Array.sum
 
-        let calculateBallDelta (magneticForce: Vector3<N>, o, otherObject, externalBField) =
-            let dynamicViscosity = 1.002e-3<Pa * s>
-            // Stokes' law
-            let gamma = (6. * PI * o.Radius * dynamicViscosity)
-            let forceDrag = gamma * o.Velocity
-            let acceleration: Vector3<m/s^2> = (magneticForce + forceDrag) / o.Mass
+        let diameter (o: SimulatedObject) = o.Radius * 2.
 
-            // This isn't fully correct
-            // Things to add:
-            // - If movement is sharper than at threshold angle, movement goes along 
-            //   previous trajectory
-            //   - We can draw a "line" and if the angle is too sharp we snap the trajectory to it 
-            //     by a certain amount (the projection, probably)
-            //   - We can also create "tunnel cylinders" to demarkate the torn medium and diretion, and use those
-                
-            let torque = torque(o.MagneticMoment, B(otherObject.MagneticMoment, o.Position - otherObject.Position) + externalBField)
+        let forwardThreshold = 0.012<N>
+        let sigma = forwardThreshold / ((PI / 4.) * ((3.2e-3<m>) |> squared))
 
-            // EXPERIMENTAL EVALUATION OF THE DRAG ROTATION COEFFICIENT OF THE SPHERICAL PARTICLE
-            (*let coefficientKinematicViscosity = 1.<m^2/s>
-            let dragRotationCoefficient = (16. * PI * coefficientKinematicViscosity) / (Length(o.AngularVelocity) * (o.Radius |> squared))
-            let angularDrag: Vector3<A T m^2> = o.AngularVelocity * FloatWithMeasure dragRotationCoefficient*)
-            let angularDrag: Vector3<A T m^2> = o.AngularVelocity * FloatWithMeasure 0.05
+        let backwardsThreshold = 0.008<N>
+        let lambda = backwardsThreshold / (3.2e-3<m>)
+
+        let gamma = 0.004<N> / (3.2e-3<m> * 0.5e-3<m/s>)
+
+        let tearingVelocityMagnitude (force: Vector3<N>) (threshold: float<N>) (diameter: float<m>) = 
+            let mag = (Length(force) - threshold) / (gamma * diameter)
+            if mag >= 0.<m/s> then
+                mag
+            else
+                0.<m/s>
+
+        let largeVelocity = 
+            let largeThreshold = 
+                if isExpanding.Invoke() then 
+                    sigma * (diameter(l) |> squared)
+                else
+                    lambda * diameter(l)
+            Normalize(largeMagneticForce) * tearingVelocityMagnitude (largeMagneticForce) (largeThreshold) (diameter(l)) 
+
+        let smallVelocity = 
+            let smallMagneticForce = -largeMagneticForce
+            let smallThreshold = lambda * diameter(s)
+            Normalize(smallMagneticForce) * tearingVelocityMagnitude (smallMagneticForce) (smallThreshold) (diameter(s))
+
+        let transformedMagneticMoment (o, other, externalBField) = 
+            let torque = torque(o.MagneticMoment, B(other.MagneticMoment, o.Position - other.Position) + externalBField)
+            
+            let angularDrag = o.AngularVelocity * FloatWithMeasure 0.05
             let momentOfInertia = ((2. / 5.) * o.Mass * (o.Radius |> squared))
-            let angularAcceleration: Vector3<1/s^2> = (torque - angularDrag) / momentOfInertia
+            let angularAcceleration = (torque - angularDrag) / momentOfInertia
 
+            let inline delta (initial: Vector3<'u/s>, acceleration: Vector3<'u/s^2>) = 
+                (initial * dt) + (acceleration * (dt |> squared) * 0.5)
 
             let dtheta = delta(o.AngularVelocity, angularAcceleration)
 
-            // TODO: write our own quaternion transform
-            let transform = 
-                if dtheta <> Vector3.Zero then
-                    let silkVector = Silk.NET.Maths.Vector3D(o.MagneticMoment.X, o.MagneticMoment.Y, o.MagneticMoment.Z)
-                    let silkDtheta = Silk.NET.Maths.Vector3D(FloatWithMeasure dtheta.X, FloatWithMeasure dtheta.Y, FloatWithMeasure dtheta.Z)
-                    let silkTransformed = Silk.NET.Maths.Vector3D.Transform(
-                        silkVector,
-                        Silk.NET.Maths.Quaternion.CreateFromAxisAngle(Silk.NET.Maths.Vector3D.Normalize(silkDtheta), silkDtheta.Length))
-                    assert(silkTransformed = silkTransformed)
-                    Vector3(silkTransformed.X, silkTransformed.Y, silkTransformed.Z)
-                else 
-                    o.MagneticMoment
+             // TODO: write our own quaternion transform
+            if dtheta <> Vector3.Zero then
+                let silkVector = Silk.NET.Maths.Vector3D(o.MagneticMoment.X, o.MagneticMoment.Y, o.MagneticMoment.Z)
+                let silkDtheta = Silk.NET.Maths.Vector3D(FloatWithMeasure dtheta.X, FloatWithMeasure dtheta.Y, FloatWithMeasure dtheta.Z)
+                let silkTransformed = Silk.NET.Maths.Vector3D.Transform(
+                    silkVector,
+                    Silk.NET.Maths.Quaternion.CreateFromAxisAngle(Silk.NET.Maths.Vector3D.Normalize(silkDtheta), silkDtheta.Length))
+                assert(silkTransformed = silkTransformed)
+                Vector3(silkTransformed.X, silkTransformed.Y, silkTransformed.Z)
+            else 
+                o.MagneticMoment
 
-            { o with
-                PreviousPosition = o.Position
-                Position = o.Position + delta(o.Velocity, acceleration)
-                Velocity = o.Velocity + acceleration * dt
-                MagneticMoment = transform
-                AngularVelocity = o.AngularVelocity + (angularAcceleration * dt)
-            }
-
-        pair <- struct(calculateBallDelta (magneticForce, o1, o2, externalBField), calculateBallDelta (-magneticForce, o2, o1, externalBField))
+        pair <- struct( 
+            { l with Position = l.Position + largeVelocity * dt; MagneticMoment = transformedMagneticMoment(l, s, externalBField) }, 
+            { s with Position = s.Position + smallVelocity * dt; MagneticMoment = transformedMagneticMoment(s, l, externalBField) })
         
-        if callback.Invoke() then runSimulation (&pair, dt, &externalBField, callback) else ()
+        if callback.Invoke() then runSimulation (&pair, dt, &externalBField, isExpanding, callback) else ()

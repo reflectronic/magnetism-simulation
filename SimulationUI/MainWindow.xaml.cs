@@ -53,7 +53,7 @@ public partial class MainWindow : Window
         .Select(a => (Color)a.GetValue(null))
         .ToArray();
 
-    static readonly Vector3 initialPosition = new(0, 0, 0.5);
+    static readonly Vector3 initialPosition = new(0.1, 0, 0);
     
     static readonly Vector3 initialMagneticMomentSmall = new(0, 0, 1);
     static readonly Vector3 initialMagneticMomentBig = new(0, 0, 3);
@@ -66,8 +66,8 @@ public partial class MainWindow : Window
     const float Mass = 0.003f;
 
     (Simulation.SimulatedObject, Simulation.SimulatedObject) objectPair = (
-        new(initialPosition, initialPosition, Vector3.Zero, Vector3.Zero, initialMagneticMomentSmall, Mass * 10, Radius),
-        new(Vector3.Zero, Vector3.Zero, Vector3.Zero, Vector3.Zero, initialMagneticMomentBig, Mass, Radius)
+        new(initialPosition, Vector3.Zero, initialMagneticMomentSmall, Mass * 10, Radius * 2),
+        new(Vector3.Zero, Vector3.Zero, initialMagneticMomentBig, Mass, Radius)
     );
 
     double periodMsec;
@@ -184,6 +184,7 @@ public partial class MainWindow : Window
             Simulation.Calculate.runSimulation(ref objectPair,
                 dt: 0.000001f,
                 externalField,
+                isExpanding: () => !engageThePerpendicularity,
                 callback: () =>
             {
                 unpauseEvent.Wait();
@@ -243,7 +244,7 @@ public partial class MainWindow : Window
 
             RotateToFaceDirection((AxisAngleRotation3D)((RotateTransform3D)externalFieldArrow.Transform).Rotation, externalField);
 
-            if (counter % 200 == 0)
+            /*if (counter % 200 == 0)
             {
                 var positionDelta = o.Position - o.PreviousPosition;
                 if (positionDelta != positionDelta || positionDelta == Vector3.Zero)
@@ -252,10 +253,10 @@ public partial class MainWindow : Window
                 }
 
                 AddPathArrow(pathArrowModels[i], o, positions);
-            }
+            }*/
         }
 
-        void AddPathArrow(GeometryModel3D pathArrowModel, Simulation.SimulatedObject o, (double X, double Y, double Z) positions)
+        /*void AddPathArrow(GeometryModel3D pathArrowModel, Simulation.SimulatedObject o, (double X, double Y, double Z) positions)
         {
             var axisAngleRotation = new AxisAngleRotation3D();
             RotateToFaceDirection(axisAngleRotation, o.Position - o.PreviousPosition);
@@ -283,7 +284,7 @@ public partial class MainWindow : Window
                 Content = pathArrowModel,
                 Transform = transformGroup
             });
-        }
+        }*/
     }
 
     private static void RotateToFaceDirection(AxisAngleRotation3D arrowRotation, Vector3 direction)
