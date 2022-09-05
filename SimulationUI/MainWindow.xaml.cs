@@ -59,19 +59,13 @@ public partial class MainWindow : Window
     static readonly Vector3 initialMagneticMomentBig = new(0, 0, 3);
 
     Vector3 externalField;
-    Vector3 perpendicularExternalField;
+
     bool engageThePerpendicularity;
 
-    const float Radius = 0.01f;
-    const float Mass = 0.003f;
 
-    (Simulation.SimulatedObject, Simulation.SimulatedObject) objectPair = (
-        new(initialPosition, Vector3.Zero, initialMagneticMomentSmall, Mass * 10, Radius * 2),
-        new(Vector3.Zero, Vector3.Zero, initialMagneticMomentBig, Mass, Radius)
-    );
+    (Simulation.SimulatedObject, Simulation.SimulatedObject) objectPair = Simulation.Calculate.standardObjects();
 
     double periodMsec;
-
 
     private void Create_Click(object sender, RoutedEventArgs e)
     {
@@ -162,16 +156,15 @@ public partial class MainWindow : Window
         });
     }
 
-    void SetThing()
+    void UpdateExternalField()
     {
         externalField = objectPair.Item1.Position - objectPair.Item2.Position;
-        perpendicularExternalField = Cross(externalField, new(0, 0, 1));
         if (engageThePerpendicularity)
         {
-            externalField = Cross(externalField, perpendicularExternalField);
+            externalField = Cross(externalField, new(0, 0, 1));
         }
 
-        externalField = Normalize(externalField) * 50;
+        externalField = Normalize(externalField) * 0.2;
     }
 
     private void Begin_Click(object sender, RoutedEventArgs e)
@@ -179,17 +172,17 @@ public partial class MainWindow : Window
         BeginSimulationButton.IsEnabled = false;
         void ThreadStart()
         {
-            SetThing();
+            UpdateExternalField();
             int counter = 0;
             Simulation.Calculate.runSimulation(ref objectPair,
-                dt: 0.000001f,
+                dt: 0.00001, // 1 microsecond
                 externalField,
                 isExpanding: () => !engageThePerpendicularity,
                 callback: () =>
             {
                 unpauseEvent.Wait();
 
-                SetThing();
+                UpdateExternalField();
 
                 if (counter % 10 == 0)
                 {
@@ -240,7 +233,7 @@ public partial class MainWindow : Window
             (ballVisualTranslation.OffsetX, ballVisualTranslation.OffsetY, ballVisualTranslation.OffsetZ) = positions;
             (momentArrowVisualTranslation.OffsetX, momentArrowVisualTranslation.OffsetY, momentArrowVisualTranslation.OffsetZ) = positions;
 
-            RotateToFaceDirection((AxisAngleRotation3D)momentArrowVisualRotation.Rotation, o.MagneticMoment);
+            //RotateToFaceDirection((AxisAngleRotation3D)momentArrowVisualRotation.Rotation, o.MagneticMoment);
 
             RotateToFaceDirection((AxisAngleRotation3D)((RotateTransform3D)externalFieldArrow.Transform).Rotation, externalField);
 
