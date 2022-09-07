@@ -53,15 +53,9 @@ public partial class MainWindow : Window
         .Select(a => (Color)a.GetValue(null))
         .ToArray();
 
-    static readonly Vector3 initialPosition = new(0.1, 0, 0);
-    
-    static readonly Vector3 initialMagneticMomentSmall = new(0, 0, 1);
-    static readonly Vector3 initialMagneticMomentBig = new(0, 0, 3);
-
     Vector3 externalField;
 
     bool engageThePerpendicularity;
-
 
     (Simulation.SimulatedObject, Simulation.SimulatedObject) objectPair = Simulation.Calculate.standardObjects();
 
@@ -164,7 +158,7 @@ public partial class MainWindow : Window
             externalField = Cross(externalField, new(0, 0, 1));
         }
 
-        externalField = Normalize(externalField) * 0.2;
+        externalField = Normalize(externalField) * 1;
     }
 
     private void Begin_Click(object sender, RoutedEventArgs e)
@@ -172,12 +166,13 @@ public partial class MainWindow : Window
         BeginSimulationButton.IsEnabled = false;
         void ThreadStart()
         {
+            var x = Stopwatch.StartNew();
             UpdateExternalField();
             int counter = 0;
             Simulation.Calculate.runSimulation(ref objectPair,
                 dt: 0.00001, // 1 microsecond
                 externalField,
-                isExpanding: () => !engageThePerpendicularity,
+                isExpanding: () => engageThePerpendicularity,
                 callback: () =>
             {
                 unpauseEvent.Wait();
@@ -227,7 +222,7 @@ public partial class MainWindow : Window
             var momentArrowVisualRotation = (RotateTransform3D)momentArrowVisualGroup.Children[0];
             var momentArrowVisualTranslation = (TranslateTransform3D)momentArrowVisualGroup.Children[1];
 
-            var position = o.Position * 50;
+            var position = o.Position * 1000;
             var positions = (position.X, position.Y, position.Z);
 
             (ballVisualTranslation.OffsetX, ballVisualTranslation.OffsetY, ballVisualTranslation.OffsetZ) = positions;

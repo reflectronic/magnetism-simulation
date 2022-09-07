@@ -18,7 +18,7 @@ type SimulatedObject =
     }
 
 module Calculate =
-    let Mu_0 = FloatWithMeasure<H/m> (4. * PI * 10e-7)
+    let Mu_0 = FloatWithMeasure<H/m> (4. * PI * 1e-7)
 
     // The F# pow operator calls into the CRT pow function for `float`.
     // B is in the innermost loop of the simulation, so pow often shows up very hot in profiles.
@@ -104,7 +104,7 @@ module Calculate =
           
         let approximateGradient (pos: Vector3<m>, dimension): float<N> =
             let currentPosition = match dimension with 
-                                  | X -> pos.X
+                                  | X -> pos.X 
                                   | Y -> pos.Y
                                   | Z -> pos.Z
             
@@ -127,7 +127,7 @@ module Calculate =
         let radius = 0.005<m>;
         let densityOfIron = 7874.<kg/m^3>;
         let circleVolume (r): float<m^3> = FloatWithMeasure ((4./3.) * PI) * (r |> cubed) 
-        let initialPosition = Vector3(0.1<m>, 0.<m>, 0.<m>)
+        let initialPosition = Vector3(0.02<m>, 0.<m>, 0.<m>)
         struct (
             { Position = initialPosition; Radius = radius; Mass = circleVolume(radius) * densityOfIron },
             { Position = Vector3.Zero; Radius = radius * (2./3.); Mass = circleVolume(radius * (2./3.)) * densityOfIron })
@@ -156,8 +156,8 @@ module Calculate =
 
         let valExternalBField = externalBField
         let magneticMoment (o: SimulatedObject) =
-            let ligma = 20_000_000.<_>
-            valExternalBField * ligma * (4./3. * PI * (o.Radius |> cubed))
+            let volume = (4./3.) * PI * (o.Radius |> cubed)
+            (valExternalBField / Mu_0) * volume / 3.
         
         let largeMagneticForce = 
             Array.init matrixLength (fun i -> 
