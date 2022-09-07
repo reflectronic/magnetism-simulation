@@ -35,13 +35,6 @@ public partial class MainWindow : Window
     /// </summary>
     ModelVisual3D[] balls;
 
-    /// <summary>
-    /// The <see cref="ModelVisual3D.Transform"/> of a moment arrow is a <see cref="Transform3DGroup"/>. <br />
-    /// <see cref="Transform3DGroup.Children"/>[0] is a <see cref="RotateTransform3D"/>, where <see cref="RotateTransform3D.Rotation"/> is an <see cref="AxisAngleRotation3D"/>. <br />
-    /// <see cref="Transform3DGroup.Children"/>[1] is a <see cref="TranslateTransform3D"/>.
-    /// </summary>
-    ModelVisual3D[] momentArrows;
-
     GeometryModel3D[] pathArrowModels;
 
     ModelVisual3D externalFieldArrow;
@@ -92,7 +85,6 @@ public partial class MainWindow : Window
         var objects = (ITuple)objectPair;
 
         balls = new ModelVisual3D[objects.Length];
-        momentArrows = new ModelVisual3D[objects.Length];
         pathArrowModels = new GeometryModel3D[objects.Length];
 
         for (int i = 0; i < objects.Length; i++)
@@ -102,7 +94,7 @@ public partial class MainWindow : Window
             var sphereModel = CreateFrozenModel(sphereBuilder, new SolidColorBrush(randomColor) { Opacity = 0.75 });
             var pathArrowModel = CreateFrozenModel(pathArrowBuilder, new SolidColorBrush(randomColor.ChangeIntensity(0.8)) { Opacity = 0.25 });
 
-            var visualRadius = 1; // ((Simulation.SimulatedObject)objects[i]).Radius * 100;
+            var visualRadius = ((Simulation.SimulatedObject)objects[i]).Radius * 1000;
             balls[i] = new ModelVisual3D
             {
                 Content = sphereModel,
@@ -116,30 +108,12 @@ public partial class MainWindow : Window
                 }
             };
 
-            momentArrows[i] = new ModelVisual3D
-            {
-                Content = momentArrowModel,
-                Transform = new Transform3DGroup
-                {
-                    Children =
-                    {
-                        new RotateTransform3D(new AxisAngleRotation3D()),
-                        new TranslateTransform3D()
-                    }
-                }
-            };
-
             pathArrowModels[i] = pathArrowModel;
         }
         
         foreach (var ball in balls)
         {
             Viewport.Children.Add(ball);
-        }
-
-        foreach (var smallMomentArrow in momentArrows)
-        {
-            Viewport.Children.Add(smallMomentArrow);
         }
 
         Viewport.Children.Add(externalFieldArrow = new ModelVisual3D
@@ -186,17 +160,10 @@ public partial class MainWindow : Window
             {
                 unpauseEvent.Wait();
 
+                Dispatcher.InvokeAsync(() => UpdateUserInterface(), System.Windows.Threading.DispatcherPriority.Background);
+
                 engageThePerpendicularity = isExpanding;
                 UpdateExternalField();
-
-                if (counter % 10 == 0)
-                {
-                    Dispatcher.InvokeAsync(() => UpdateUserInterface(ref counter), System.Windows.Threading.DispatcherPriority.Background);
-                    if(!unpauseEvent.IsSet)
-                    {
-                        Console.WriteLine("FLYTHROUGH ERROR! PAUSE ISSUE!");
-                    }
-                }
 
                 counter++;
 
@@ -216,108 +183,58 @@ public partial class MainWindow : Window
         PauseButton.IsEnabled = true;
     }
 
-    private void UpdateUserInterface(ref int counter)
+    private void UpdateUserInterface()
     {
         var objects = (ITuple)objectPair;
         for (int i = 0; i < objects.Length; i++)
         {
             var o = (Simulation.SimulatedObject)objects[i];
             var ballVisual = balls[i];
-            var momentArrowVisual = momentArrows[i];
 
             var ballVisualTranslationGroup = (Transform3DGroup)ballVisual.Transform;
-            var ballVisualTranslation= (TranslateTransform3D)ballVisualTranslationGroup.Children[1];
-
-            var momentArrowVisualGroup = (Transform3DGroup)momentArrowVisual.Transform;
-            var momentArrowVisualRotation = (RotateTransform3D)momentArrowVisualGroup.Children[0];
-            var momentArrowVisualTranslation = (TranslateTransform3D)momentArrowVisualGroup.Children[1];
+            var ballVisualTranslation = (TranslateTransform3D)ballVisualTranslationGroup.Children[1];
 
             var position = o.Position * 1000;
             var positions = (position.X, position.Y, position.Z);
 
             (ballVisualTranslation.OffsetX, ballVisualTranslation.OffsetY, ballVisualTranslation.OffsetZ) = positions;
-            (momentArrowVisualTranslation.OffsetX, momentArrowVisualTranslation.OffsetY, momentArrowVisualTranslation.OffsetZ) = positions;
-
-            //RotateToFaceDirection((AxisAngleRotation3D)momentArrowVisualRotation.Rotation, o.MagneticMoment);
-
-            RotateToFaceDirection((AxisAngleRotation3D)((RotateTransform3D)externalFieldArrow.Transform).Rotation, externalField);
-
-            /*if (counter % 200 == 0)
-            {
-                var positionDelta = o.Position - o.PreviousPosition;
-                if (positionDelta != positionDelta || positionDelta == Vector3.Zero)
-                {
-                    continue;
-                }
-
-                AddPathArrow(pathArrowModels[i], o, positions);
-            }*/
         }
 
-        /*void AddPathArrow(GeometryModel3D pathArrowModel, Simulation.SimulatedObject o, (double X, double Y, double Z) positions)
+        RotateToFaceDirection((AxisAngleRotation3D)((RotateTransform3D)externalFieldArrow.Transform).Rotation, externalField);
+
+        static void RotateToFaceDirection(AxisAngleRotation3D arrowRotation, Vector3 direction)
         {
-            var axisAngleRotation = new AxisAngleRotation3D();
-            RotateToFaceDirection(axisAngleRotation, o.Position - o.PreviousPosition);
-            axisAngleRotation.Freeze();
+            var directionA = Normalize(new Vector3(0, 0, 1));
+            var directionB = Normalize(direction);
 
-            var pathArrowRotation = new RotateTransform3D(axisAngleRotation);
-            pathArrowRotation.Freeze();
+            var rotationAngle = Math.Acos(Dot(directionA, directionB));
+            var rotationAxis = Cross(directionA, directionB);
 
-            var pathArrowTranslation = new TranslateTransform3D();
-            (pathArrowTranslation.OffsetX, pathArrowTranslation.OffsetY, pathArrowTranslation.OffsetZ) = positions;
-            pathArrowTranslation.Freeze();
-
-            var transformGroup = new Transform3DGroup()
+            if (rotationAxis == Vector3.Zero)
             {
-                Children =
+                // We ran into a special case. The two vectors could either be perpendicular or parallel.
+                // We check the signs and rotate each component by 180 degrees if the signs of the components do not match.
+
+                if (Math.Sign(directionA.X) != Math.Sign(directionB.X))
                 {
-                    pathArrowRotation,
-                    pathArrowTranslation
+                    rotationAxis = new Vector3(rotationAxis.X, 1, rotationAxis.Z);
                 }
-            };
-            transformGroup.Freeze();
 
-            Viewport.Children.Add(new ModelVisual3D()
-            {
-                Content = pathArrowModel,
-                Transform = transformGroup
-            });
-        }*/
-    }
+                if (Math.Sign(directionA.Y) != Math.Sign(directionB.Y))
+                {
+                    rotationAxis = new Vector3(rotationAxis.X, rotationAxis.Y, 1);
+                }
 
-    private static void RotateToFaceDirection(AxisAngleRotation3D arrowRotation, Vector3 direction)
-    {
-        var directionA = Normalize(new Vector3(0, 0, 1));
-        var directionB = Normalize(direction);
-
-        var rotationAngle = Math.Acos(Dot(directionA, directionB));
-        var rotationAxis = Cross(directionA, directionB);
-
-        if (rotationAxis == Vector3.Zero)
-        {
-            // We ran into a special case. The two vectors could either be perpendicular or parallel.
-            // We check the signs and rotate each component by 180 degrees if the signs of the components do not match.
-
-            if (Math.Sign(directionA.X) != Math.Sign(directionB.X))
-            {
-                rotationAxis = new Vector3(rotationAxis.X, 1, rotationAxis.Z);
+                if (Math.Sign(directionA.Z) != Math.Sign(directionB.Z))
+                {
+                    rotationAxis = new Vector3(1, rotationAxis.Y, rotationAxis.Z);
+                }
             }
 
-            if (Math.Sign(directionA.Y) != Math.Sign(directionB.Y))
-            {
-                rotationAxis = new Vector3(rotationAxis.X, rotationAxis.Y, 1);
-            }
-
-            if (Math.Sign(directionA.Z) != Math.Sign(directionB.Z))
-            {
-                rotationAxis = new Vector3(1, rotationAxis.Y, rotationAxis.Z);
-            }
+            arrowRotation.Axis = rotationAxis.AsVector3D();
+            arrowRotation.Angle = (180 / Math.PI) * rotationAngle;
         }
-
-        arrowRotation.Axis = rotationAxis.AsVector3D();
-        arrowRotation.Angle = (180 / Math.PI) * rotationAngle;
     }
-
 
     private void Pause_Click(object sender, RoutedEventArgs e)
     {
