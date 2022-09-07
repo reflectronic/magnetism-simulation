@@ -127,7 +127,7 @@ module Calculate =
         let radius = 0.005<m>;
         let densityOfIron = 7874.<kg/m^3>;
         let circleVolume (r): float<m^3> = FloatWithMeasure ((4./3.) * PI) * (r |> cubed) 
-        let initialPosition = Vector3(0.02<m>, 0.<m>, 0.<m>)
+        let initialPosition = Vector3(0.0075<m>, 0.<m>, 0.<m>)
         struct (
             { Position = initialPosition; Radius = radius; Mass = circleVolume(radius) * densityOfIron },
             { Position = Vector3.Zero; Radius = radius * (2./3.); Mass = circleVolume(radius * (2./3.)) * densityOfIron })
@@ -135,8 +135,8 @@ module Calculate =
     let rec runSimulation (pair: byref<struct (SimulatedObject * SimulatedObject)>, 
                            dt: float<s>, 
                            externalBField: inref<Vector3<T>>,
-                           isExpanding: System.Func<bool>,
-                           callback: System.Func<bool>) =
+                           isExpanding: bool,
+                           callback: System.Func<bool, bool>) =
         let struct(l, s) = pair
             
         // The net force applied on both objects is the same (Newton's third law).
@@ -191,13 +191,16 @@ module Calculate =
             else
                 0.<m/s>
 
+
+
         let largeVelocity = 
             let largeThreshold = 
-                if isExpanding.Invoke() then 
+                if isExpanding then 
                     sigma * (diameter(l) |> squared)
                 else
                     lambda * diameter(l)
             Normalize(largeMagneticForce) * tearingVelocityMagnitude (largeMagneticForce) (largeThreshold) (diameter(l)) 
+
 
         let smallVelocity = 
             let smallMagneticForce = -largeMagneticForce
@@ -207,5 +210,9 @@ module Calculate =
         pair <- struct( 
             { l with Position = l.Position + largeVelocity * dt }, 
             { s with Position = s.Position + smallVelocity * dt })
+
+       // If we are currently expanding, we should start contracting when the large ball can no longer overcome the threshold.
+       // If we are currently contracting, we should start expanding when the large ball begins to overcome its threshold.
+        let isExpanding = Length(largeVelocity) <> 0.<m/s>
         
-        if callback.Invoke() then runSimulation (&pair, dt, &externalBField, isExpanding, callback) else ()
+        if callback.Invoke(isExpanding) then runSimulation (&pair, dt, &externalBField, isExpanding, callback) else ()

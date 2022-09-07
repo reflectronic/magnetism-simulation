@@ -56,10 +56,9 @@ public partial class MainWindow : Window
     Vector3 externalField;
 
     bool engageThePerpendicularity;
+    bool? textIsExpanding;
 
     (Simulation.SimulatedObject, Simulation.SimulatedObject) objectPair = Simulation.Calculate.standardObjects();
-
-    double periodMsec;
 
     private void Create_Click(object sender, RoutedEventArgs e)
     {
@@ -157,8 +156,18 @@ public partial class MainWindow : Window
         {
             externalField = Cross(externalField, new(0, 0, 1));
         }
+        
+        if (textIsExpanding != engageThePerpendicularity)
+        {
+            ExpandingOrContracting.Dispatcher.Invoke(() =>
+            {
+                ExpandingOrContracting.Text = engageThePerpendicularity ? "Expanding" : "Contracting";
+            });
 
-        externalField = Normalize(externalField) * 1;
+            textIsExpanding = engageThePerpendicularity;
+        }
+
+        externalField = Normalize(externalField) * (engageThePerpendicularity ? 1.5 : 0.375);
     }
 
     private void Begin_Click(object sender, RoutedEventArgs e)
@@ -172,11 +181,12 @@ public partial class MainWindow : Window
             Simulation.Calculate.runSimulation(ref objectPair,
                 dt: 0.00001, // 1 microsecond
                 externalField,
-                isExpanding: () => engageThePerpendicularity,
-                callback: () =>
+                isExpanding: false,
+                callback: (isExpanding) =>
             {
                 unpauseEvent.Wait();
 
+                engageThePerpendicularity = isExpanding;
                 UpdateExternalField();
 
                 if (counter % 10 == 0)
@@ -308,10 +318,6 @@ public partial class MainWindow : Window
         arrowRotation.Angle = (180 / Math.PI) * rotationAngle;
     }
 
-    private void Slider_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        periodMsec = e.NewValue;
-    }
 
     private void Pause_Click(object sender, RoutedEventArgs e)
     {
