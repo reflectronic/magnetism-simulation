@@ -18,119 +18,35 @@ type SimulatedObject =
     }
 
 module Calculate =
-    let Mu_0 = FloatWithMeasure<H/m> (4. * PI * 1e-7)
-
     // The F# pow operator calls into the CRT pow function for `float`.
     // B is in the innermost loop of the simulation, so pow often shows up very hot in profiles.
     // Manually writing out the multiplications avoids this problem.
     let inline pow5 v = v * v * v * v * v
+    let inline pow4 v = v * v * v * v
     let inline cubed v = v * v * v
     let inline squared v = v * v
+
+    let standardObjects () =
+        let radius = 0.005<m>;
+        let densityOfIron = 7874.<kg/m^3>;
+        let circleVolume (r): float<m^3> = FloatWithMeasure ((4./3.) * PI) * (r |> cubed) 
+        struct (
+            { Position = Vector3(0.0075<m>, 0.<m>, 0.<m>); Radius = radius;           Mass = circleVolume(radius) * densityOfIron },
+            { Position = Vector3.Zero;                     Radius = radius * (2./3.); Mass = circleVolume(radius * (2./5.)) * densityOfIron })
+
+    let Mu_0 = FloatWithMeasure<H/m> (4. * PI * 1e-7)
 
     let H (M: Vector3<A m^2>, r: Vector3<m>) = (1. / (4. * PI)) * (3. * (Dot(M, r) * r) / (Length(r) |> pow5) - (M / (Length(r) |> cubed)))
 
     let B (M: Vector3<A m^2>, r): Vector3<T> = Mu_0 * H(M, r)
 
     let inline U (m: Vector3<A m^2>, B: Vector3<T>) = Dot(m, B)
-
+        
     let inline torque (m: Vector3<A m^2>, B: Vector3<T>) = Cross(m, B)
 
-    [<Struct>]  
-    type private Dimension = 
-        | X
-        | Y
-        | Z
-
-    let magneticForce (position: Vector3<m>, m, M): Vector3<N> = 
-        let inline product upperBound exclusions fn =
-            let mutable partialProduct = 1.
-            for i = 0 to upperBound do
-                let struct (exclusion1, exclusion2) = exclusions
-                if exclusion1 <> i && exclusion2 <> i then
-                    partialProduct <- partialProduct * fn i
-
-            partialProduct
-
-        let inline sum upperBound exclusion fn =
-            let mutable partialSum = 0.
-            for i = 0 to upperBound do
-                if i <> exclusion then
-                    partialSum <- partialSum + fn i
-                
-            partialSum
-
-        // We use a polynomial interpolation to estimate the gradient of the potentials.
-        // The Lagrange form of the interpolation is:
-        //        𝑛
-        // 𝐿(𝑥) = Σ  yⱼ * 𝑙ⱼ(𝑥).
-        //       𝑗=0
-        //
-        // To find the gradient, we take the derivative of the Lagrange form, so the formula for gradient is:
-        //         𝑛
-        // 𝐿'(𝑥) = Σ = yⱼ * 𝑙ⱼ'(𝑥)
-        //        𝑗=0 
-        //
-        // 𝑙ⱼ'(𝑥) represents the derivative of the Lagrange basis polynomial, given as:
-        //         𝑛         𝑛
-        // 𝑙ⱼ'(𝑥) = Σ        (Π (𝑥 - 𝑥ₗ))
-        //        𝑘=0, 𝑘≠𝑗   𝑙=0, 𝑙≠𝑘, 𝑙≠𝑗
-        //       -----------------------
-        //                 𝑛
-        //                 Π (𝑥ⱼ - 𝑥ₖ)
-        //                𝑘=0, 𝑘≠𝑗 
-
-        // We always take the derivative at 𝑥 = 0.
-        let l' (j, dx) = 
-            let n = 2
-            let x = Vector3(-dx, 0., dx)
-            let numerator = (sum n j 
-                (fun k -> product n (k, j) (fun l -> 0. - x.[l]))) 
-
-            let denominator = product n (j, -1) (fun k -> x.[j] - x.[k]);
-            numerator / denominator
-           
-        let inline mapi fn v = 
-            let struct(x, y, z) = v
-            struct(fn 0 x, fn 1 y, fn 2 z)
-
-        let L' (yVals: struct(float<'u> * float<'u> * float<'u>), dx: float<'f>) = 
-            let inline sum v =
-                let struct(x, y, z) = v
-                x + y + z
-
-            yVals 
-            |> mapi (fun i y -> (y |> float |> FloatWithMeasure<'u/'f>) * l'(i, float dx)) 
-            |> sum
-          
-        let approximateGradient (pos: Vector3<m>, dimension): float<N> =
-            let currentPosition = match dimension with 
-                                  | X -> pos.X 
-                                  | Y -> pos.Y
-                                  | Z -> pos.Z
-            
-            let dx = 0.0001<m>
-            let positionGradient = struct(currentPosition - dx, currentPosition, currentPosition + dx)
-
-            let potentials = positionGradient |> mapi (fun _ p -> 
-                let radius = match dimension with
-                             | X -> Vector3(p, pos.Y, pos.Z)
-                             | Y -> Vector3(pos.X, p, pos.Z)
-                             | Z -> Vector3(pos.X, pos.Y, p)
-                U(m, B(M, radius)))
-
-            L'(potentials, dx)
-
-        Vector3(approximateGradient(position, X), approximateGradient(position, Y), approximateGradient(position, Z))
-
-
-    let standardObjects () =
-        let radius = 0.005<m>;
-        let densityOfIron = 7874.<kg/m^3>;
-        let circleVolume (r): float<m^3> = FloatWithMeasure ((4./3.) * PI) * (r |> cubed) 
-        let initialPosition = Vector3(0.0075<m>, 0.<m>, 0.<m>)
-        struct (
-            { Position = initialPosition; Radius = radius; Mass = circleVolume(radius) * densityOfIron },
-            { Position = Vector3.Zero; Radius = radius * (2./3.); Mass = circleVolume(radius * (2./3.)) * densityOfIron })
+    let magneticForce (r: Vector3<m>, m: Vector3<A m^2>, M: Vector3<A m^2>): Vector3<N> = 
+        let f = (Dot(m, r) * M) + (Dot(M, r) * m) + (Dot(m, M) * r) - ((5. * Dot(m, r) * Dot(M, r)) / (Length(r) |> squared)) * r
+        (3. * Mu_0) / (4. * PI * (Length(r) |> pow5)) * f
 
     let rec runSimulation (pair: byref<struct (SimulatedObject * SimulatedObject)>, 
                            dt: float<s>, 
@@ -184,28 +100,33 @@ module Calculate =
 
         let gamma = 0.004<N> / (3.2e-3<m> * 0.5e-3<m/s>)
 
-        let tearingVelocityMagnitude (force: Vector3<N>) (threshold: float<N>) (diameter: float<m>) = 
+        let tearingVelocityMagnitude (force: Vector3<N>, threshold: float<N>, diameter: float<m>) = 
             let mag = (Length(force) - threshold) / (gamma * diameter)
             if mag >= 0.<m/s> then
+                // if (Abs(float force.X) < float threshold) then
+                //     maybe we shouldn't go?
                 mag
             else
                 0.<m/s>
 
-
+        // let lambdaDl: float<N> = (-3. * Mu_0 * Dot(magneticMoment(s), magneticMoment(l))) / (2. * PI * (0.0103787100813698<m> |> pow4))
+        // let Dmin : float<m> = ((3. * Mu_0 * Dot(magneticMoment(s), magneticMoment(l)))/(2. * PI * lambda * diameter(l))) |> sqrt |> sqrt
+        // let Dmax : float<m> = ((3. * Mu_0 * Dot(magneticMoment(s), magneticMoment(l)))/(4. * PI * sigma * (diameter(l) |> squared))) |> sqrt |> sqrt
 
         let largeVelocity = 
+
             let largeThreshold = 
                 if isExpanding then 
                     sigma * (diameter(l) |> squared)
                 else
                     lambda * diameter(l)
-            Normalize(largeMagneticForce) * tearingVelocityMagnitude (largeMagneticForce) (largeThreshold) (diameter(l)) 
+            Normalize(largeMagneticForce) * tearingVelocityMagnitude (largeMagneticForce, largeThreshold, diameter(l)) 
 
 
         let smallVelocity = 
             let smallMagneticForce = -largeMagneticForce
             let smallThreshold = lambda * diameter(s)
-            Normalize(smallMagneticForce) * tearingVelocityMagnitude (smallMagneticForce) (smallThreshold) (diameter(s))
+            Normalize(smallMagneticForce) * tearingVelocityMagnitude (smallMagneticForce, smallThreshold, diameter(s))
 
         pair <- struct( 
             { l with Position = l.Position + largeVelocity * dt }, 
@@ -214,5 +135,5 @@ module Calculate =
        // If we are currently expanding, we should start contracting when the large ball can no longer overcome the threshold.
        // If we are currently contracting, we should start expanding when the large ball begins to overcome its threshold.
         let isExpanding = Length(largeVelocity) <> 0.<m/s>
-        
+
         if callback.Invoke(isExpanding) then runSimulation (&pair, dt, &externalBField, isExpanding, callback) else ()

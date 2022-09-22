@@ -141,7 +141,7 @@ public partial class MainWindow : Window
             textIsExpanding = engageThePerpendicularity;
         }
 
-        externalField = Normalize(externalField) * (engageThePerpendicularity ? 1.5 : 0.375);
+        externalField = Normalize(externalField) * (engageThePerpendicularity ? 1 : 0.25);
     }
 
     private void Begin_Click(object sender, RoutedEventArgs e)
@@ -160,7 +160,8 @@ public partial class MainWindow : Window
             {
                 unpauseEvent.Wait();
 
-                Dispatcher.InvokeAsync(() => UpdateUserInterface(), System.Windows.Threading.DispatcherPriority.Background);
+                if (counter % 50 == 0)
+                    Dispatcher.InvokeAsync(() => UpdateUserInterface(), System.Windows.Threading.DispatcherPriority.Background);
 
                 engageThePerpendicularity = isExpanding;
                 UpdateExternalField();
