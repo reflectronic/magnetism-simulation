@@ -13,9 +13,10 @@ open type System.Math
 type SimulatedObject = 
     { 
         Position: Vector3<m>;
-        Mass: float<kg>;
         Radius: float<m>
     }
+
+
 
 module Calculate =
     // The F# pow operator calls into the CRT pow function for `float`.
@@ -28,11 +29,11 @@ module Calculate =
 
     let standardObjects () =
         let radius = 0.005<m>;
-        let densityOfIron = 7874.<kg/m^3>;
-        let circleVolume (r): float<m^3> = FloatWithMeasure ((4./3.) * PI) * (r |> cubed) 
         struct (
-            { Position = Vector3(0.0075<m>, 0.<m>, 0.<m>); Radius = radius;           Mass = circleVolume(radius) * densityOfIron },
-            { Position = Vector3.Zero;                     Radius = radius * (2./3.); Mass = circleVolume(radius * (2./5.)) * densityOfIron })
+            { Position = Vector3(0.0075<m>, 0.<m>, 0.<m>); Radius = radius; },
+            { Position = Vector3.Zero;                     Radius = radius * (2./3.) })
+
+    let fieldStrength isExpanding = if isExpanding then 1.<T> else 0.25<T>
 
     let Mu_0 = FloatWithMeasure<H/m> (4. * PI * 1e-7)
 
@@ -61,36 +62,12 @@ module Calculate =
         // Since the radius of both balls is not the same, however, the threshold force
         // will need to be calculated independently for both.
 
-        // Arbitrary value that balances the density of points with processing time.
-        // For a sphere with a radius of 0.01, this should provide us with about 10 points
-        // from one point on the sphere to its opposite point.
-        let pointGap = 0.<m> // o1.Radius * 2f / 5f
-
-        let pointsLength = 1 //Round(o1.Radius * 2f / pointGap, System.MidpointRounding.AwayFromZero) |> int
-
-        let matrixLength = pointsLength * pointsLength * pointsLength
-
         let valExternalBField = externalBField
         let magneticMoment (o: SimulatedObject) =
             let volume = (4./3.) * PI * (o.Radius |> cubed)
             (valExternalBField / Mu_0) * volume / 3.
         
-        let largeMagneticForce = 
-            Array.init matrixLength (fun i -> 
-                let x = i % pointsLength |> float
-                let y = i / pointsLength % pointsLength |> float
-                let z = i / (pointsLength * pointsLength) % pointsLength |> float
-
-                let indexToPos i = -l.Radius + pointGap * i
-                let unitPosition = Vector3(indexToPos x, indexToPos y, indexToPos z) 
-                if Length(unitPosition) <= 1.<m> then 
-                    let p = unitPosition * float l.Radius + l.Position
-                    magneticForce(p - s.Position, magneticMoment(l) / float matrixLength, magneticMoment(s))
-                else 
-                    Vector3.Zero)
-            |> Array.sum
-
-        let diameter (o: SimulatedObject) = o.Radius * 2.
+        let largeMagneticForce = magneticForce(l.Position - s.Position, magneticMoment(l), magneticMoment(s))
 
         let forwardThreshold = 0.012<N>
         let sigma = forwardThreshold / ((PI / 4.) * ((3.2e-3<m>) |> squared))
@@ -109,12 +86,8 @@ module Calculate =
             else
                 0.<m/s>
 
-        // let lambdaDl: float<N> = (-3. * Mu_0 * Dot(magneticMoment(s), magneticMoment(l))) / (2. * PI * (0.0103787100813698<m> |> pow4))
-        // let Dmin : float<m> = ((3. * Mu_0 * Dot(magneticMoment(s), magneticMoment(l)))/(2. * PI * lambda * diameter(l))) |> sqrt |> sqrt
-        // let Dmax : float<m> = ((3. * Mu_0 * Dot(magneticMoment(s), magneticMoment(l)))/(4. * PI * sigma * (diameter(l) |> squared))) |> sqrt |> sqrt
-
+        let diameter (o: SimulatedObject) = o.Radius * 2.
         let largeVelocity = 
-
             let largeThreshold = 
                 if isExpanding then 
                     sigma * (diameter(l) |> squared)
@@ -131,9 +104,9 @@ module Calculate =
         pair <- struct( 
             { l with Position = l.Position + largeVelocity * dt }, 
             { s with Position = s.Position + smallVelocity * dt })
-
-       // If we are currently expanding, we should start contracting when the large ball can no longer overcome the threshold.
-       // If we are currently contracting, we should start expanding when the large ball begins to overcome its threshold.
+            
+        // If we are currently expanding, we should start contracting when the large ball can no longer overcome the threshold.
+        // If we are currently contracting, we should start expanding when the large ball begins to overcome its threshold.
         let isExpanding = Length(largeVelocity) <> 0.<m/s>
 
         if callback.Invoke(isExpanding) then runSimulation (&pair, dt, &externalBField, isExpanding, callback) else ()

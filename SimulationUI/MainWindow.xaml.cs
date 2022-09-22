@@ -48,10 +48,10 @@ public partial class MainWindow : Window
 
     Vector3 externalField;
 
-    bool engageThePerpendicularity;
+    bool engageThePerpendicularity = true;
     bool? textIsExpanding;
 
-    (Simulation.SimulatedObject, Simulation.SimulatedObject) objectPair = Simulation.Calculate.standardObjects();
+    (Simulation.SimulatedObject, Simulation.SimulatedObject) objectPair = Simulation.Parameters.standardObjects();
 
     private void Create_Click(object sender, RoutedEventArgs e)
     {
@@ -141,7 +141,7 @@ public partial class MainWindow : Window
             textIsExpanding = engageThePerpendicularity;
         }
 
-        externalField = Normalize(externalField) * (engageThePerpendicularity ? 1 : 0.25);
+        externalField = Normalize(externalField) * (Simulation.Parameters.fieldStrength(engageThePerpendicularity));
     }
 
     private void Begin_Click(object sender, RoutedEventArgs e)
@@ -149,13 +149,12 @@ public partial class MainWindow : Window
         BeginSimulationButton.IsEnabled = false;
         void ThreadStart()
         {
-            var x = Stopwatch.StartNew();
             UpdateExternalField();
             int counter = 0;
             Simulation.Calculate.runSimulation(ref objectPair,
                 dt: 0.00001, // 1 microsecond
                 externalField,
-                isExpanding: false,
+                isExpanding: true,
                 callback: (isExpanding) =>
             {
                 unpauseEvent.Wait();
