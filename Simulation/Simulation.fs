@@ -6,34 +6,23 @@ open LanguagePrimitives
 
 open type System.Math
 
-// type Vector3 = Silk.NET.Maths.Vector3D<float>
-// type Quaternion = Silk.NET.Maths.Quaternion<float>
-
 [<Struct>]
 type SimulatedObject = 
     { 
         Position: Vector3<m>;
         Radius: float<m>
     }
+    static member op_Equality (left: SimulatedObject, right: SimulatedObject) =
+        left = right
 
-
+    static member op_Inequality (left: SimulatedObject, right: SimulatedObject) =
+        left <> right
 
 module Calculate =
-    // The F# pow operator calls into the CRT pow function for `float`.
-    // B is in the innermost loop of the simulation, so pow often shows up very hot in profiles.
-    // Manually writing out the multiplications avoids this problem.
-    let inline pow5 v = v * v * v * v * v
-    let inline pow4 v = v * v * v * v
-    let inline cubed v = v * v * v
-    let inline squared v = v * v
-
-    let standardObjects () =
-        let radius = 0.005<m>;
-        struct (
-            { Position = Vector3(0.0075<m>, 0.<m>, 0.<m>); Radius = radius; },
-            { Position = Vector3.Zero;                     Radius = radius * (2./3.) })
-
-    let fieldStrength isExpanding = if isExpanding then 1.<T> else 0.25<T>
+    let inline internal pow5 v = v * v * v * v * v
+    let inline internal pow4 v = v * v * v * v
+    let inline internal cubed v = v * v * v
+    let inline internal squared v = v * v
 
     let Mu_0 = FloatWithMeasure<H/m> (4. * PI * 1e-7)
 
@@ -49,23 +38,34 @@ module Calculate =
         let f = (Dot(m, r) * M) + (Dot(M, r) * m) + (Dot(m, M) * r) - ((5. * Dot(m, r) * Dot(M, r)) / (Length(r) |> squared)) * r
         (3. * Mu_0) / (4. * PI * (Length(r) |> pow5)) * f
 
-    let rec runSimulation (pair: byref<struct (SimulatedObject * SimulatedObject)>, 
-                           dt: float<s>, 
-                           externalBField: inref<Vector3<T>>,
-                           isExpanding: bool,
-                           callback: System.Func<bool, bool>) =
-        let struct(l, s) = pair
-            
-        // The net force applied on both objects is the same (Newton's third law).
-        // We can calculate the force applied to o1 as a result of o2's magnetic field,
-        // and apply the opposite of that force to o2.
-        // Since the radius of both balls is not the same, however, the threshold force
-        // will need to be calculated independently for both.
+    let BFromPositions (pair, shouldExpand, fieldStrength: float<T>) =
+        let struct (l, s) = pair
+        let fieldDirection = 
+            let positionDelta = l.Position - s.Position
+            let flippedDelta = if shouldExpand then Cross(positionDelta, Vector3(0., 0., 1.)) else positionDelta
+            Normalize(flippedDelta)
+        fieldDirection * fieldStrength
 
-        let valExternalBField = externalBField
+open Calculate
+
+[<Struct>]
+type SimulationResult<'a, 'b> =
+    | ContinueSimulation of field: Vector3<T> * state: 'a
+    | EndSimulation of result: 'b
+
+
+module Simulation =
+    let rec run (pair: struct (SimulatedObject * SimulatedObject), 
+                          dt: float<s>, 
+                          externalBField: Vector3<T>,
+                          isExpanding: bool)
+                          state
+                          callback =
+        let struct(l, s) = pair
+
         let magneticMoment (o: SimulatedObject) =
             let volume = (4./3.) * PI * (o.Radius |> cubed)
-            (valExternalBField / Mu_0) * volume / 3.
+            (externalBField / Mu_0) * volume / 3.
         
         let largeMagneticForce = magneticForce(l.Position - s.Position, magneticMoment(l), magneticMoment(s))
 
@@ -79,9 +79,7 @@ module Calculate =
 
         let tearingVelocityMagnitude (force: Vector3<N>, threshold: float<N>, diameter: float<m>) = 
             let mag = (Length(force) - threshold) / (gamma * diameter)
-            if mag >= 0.<m/s> then
-                // if (Abs(float force.X) < float threshold) then
-                //     maybe we shouldn't go?
+            if mag >= 0.<m/s> && (Abs(float force.X) >= float threshold) then
                 mag
             else
                 0.<m/s>
@@ -101,12 +99,15 @@ module Calculate =
             let smallThreshold = lambda * diameter(s)
             Normalize(smallMagneticForce) * tearingVelocityMagnitude (smallMagneticForce, smallThreshold, diameter(s))
 
-        pair <- struct( 
+        let pair = struct( 
             { l with Position = l.Position + largeVelocity * dt }, 
             { s with Position = s.Position + smallVelocity * dt })
-            
+                    
         // If we are currently expanding, we should start contracting when the large ball can no longer overcome the threshold.
         // If we are currently contracting, we should start expanding when the large ball begins to overcome its threshold.
-        let isExpanding = Length(largeVelocity) <> 0.<m/s>
+        // If the external field is zero, the balls cannot be moving, so we cannot make a determination about the direction of the fields. Carry the previous state forward.
+        let shouldExpand = if externalBField <> Vector3.Zero then Length(largeVelocity) <> 0.<m/s> else isExpanding
 
-        if callback.Invoke(isExpanding) then runSimulation (&pair, dt, &externalBField, isExpanding, callback) else ()
+        match callback struct(pair, shouldExpand, state) with
+        | ContinueSimulation(field, state) -> run (pair, dt, field, shouldExpand) state callback
+        | EndSimulation(result) -> result

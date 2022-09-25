@@ -10,8 +10,4 @@
 	<Compile Include="Parameters.fs" />
   </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Silk.NET.Maths" Version="2.15.0" />
-  </ItemGroup>
-
 </Project>

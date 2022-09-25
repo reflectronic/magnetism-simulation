@@ -5,9 +5,10 @@ open FSharp.Data.UnitSystems.SI.UnitSymbols
 
 module Parameters =
     let standardObjects () =
-        let radius = 0.005<m>;
+        let largeRadius = 0.005<m>;
+        let smallRadius = largeRadius * (2. / 3.)
         struct (
-            { Position = Vector3(0.001<m>, 0.<m>, 0.<m>); Radius = radius; },
-            { Position = Vector3.Zero;                     Radius = radius * (2./3.) })
+            { Position = Vector3(largeRadius + smallRadius, 0.<m>, 0.<m>); Radius = largeRadius },
+            { Position = Vector3.Zero;                                     Radius = smallRadius })
 
     let fieldStrength isExpanding = if isExpanding then 1.<T> else 0.25<T>

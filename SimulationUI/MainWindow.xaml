@@ -23,6 +23,9 @@
             <Button Click="Begin_Click" Margin="5,0,0,0" x:Name="BeginSimulationButton">Begin simulation</Button>
             <Button Click="Pause_Click" Margin="5,0,0,0" x:Name="PauseButton" IsEnabled="False">Pause</Button>
             <TextBox Background="Transparent" BorderThickness="0" IsReadOnly="True" TextWrapping="Wrap" x:Name="ExpandingOrContracting" Margin="5,0,0,0" />
+            <Expander Header="Detailed log">
+                <ListBox Height="300" Width="400"  x:Name="LogItems" />
+            </Expander>
         </StackPanel>
     </Grid>
 </Window>

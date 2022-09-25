@@ -6,7 +6,6 @@
 using HelixToolkit.Wpf;
 
 using System;
-using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -15,7 +14,12 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 
-using static Vectors;
+using Simulation;
+using static Simulation.Vectors;
+using Microsoft.FSharp.Core;
+
+using ObjectPair = System.ValueTuple<Simulation.SimulatedObject, Simulation.SimulatedObject>;
+using SimulationState = System.ValueTuple<bool, System.ValueTuple<Simulation.SimulatedObject, Simulation.SimulatedObject>>;
 
 namespace SimulationUI;
 
@@ -46,12 +50,10 @@ public partial class MainWindow : Window
         .Select(a => (Color)a.GetValue(null))
         .ToArray();
 
-    Vector3 externalField;
-
     bool engageThePerpendicularity = true;
     bool? textIsExpanding;
 
-    (Simulation.SimulatedObject, Simulation.SimulatedObject) objectPair = Simulation.Parameters.standardObjects();
+    (SimulatedObject, SimulatedObject) objectPair = Parameters.standardObjects();
 
     private void Create_Click(object sender, RoutedEventArgs e)
     {
@@ -67,7 +69,6 @@ public partial class MainWindow : Window
 
             return model;
         }
-
 
         CreateResourcesButton.IsEnabled = false;
         
@@ -123,55 +124,52 @@ public partial class MainWindow : Window
         });
     }
 
-    void UpdateExternalField()
-    {
-        externalField = objectPair.Item1.Position - objectPair.Item2.Position;
-        if (engageThePerpendicularity)
-        {
-            externalField = Cross(externalField, new(0, 0, 1));
-        }
-        
-        if (textIsExpanding != engageThePerpendicularity)
-        {
-            ExpandingOrContracting.Dispatcher.Invoke(() =>
-            {
-                ExpandingOrContracting.Text = engageThePerpendicularity ? "Expanding" : "Contracting";
-            });
-
-            textIsExpanding = engageThePerpendicularity;
-        }
-
-        externalField = Normalize(externalField) * (Simulation.Parameters.fieldStrength(engageThePerpendicularity));
-    }
-
     private void Begin_Click(object sender, RoutedEventArgs e)
     {
         BeginSimulationButton.IsEnabled = false;
         void ThreadStart()
         {
-            UpdateExternalField();
             int counter = 0;
-            Simulation.Calculate.runSimulation(ref objectPair,
-                dt: 0.00001, // 1 microsecond
-                externalField,
-                isExpanding: true,
-                callback: (isExpanding) =>
+            Simulation.Simulation.run(objectPair,
+                0.000001, // dt: 1 microsecond
+                Vector3.Zero,
+                true, // start the balls by expanding.
+                (true, objectPair), // wasExpanding is true.
+                callback: FuncConvert.FromFunc<(ObjectPair, bool, SimulationState), SimulationResult<SimulationState, ValueTuple>>((parameters) =>
             {
                 unpauseEvent.Wait();
 
+                var (objectPair, isExpanding, (wasExpanding, lastPair)) = parameters;
+                this.objectPair = objectPair;
+
+                var externalField = Calculate.BFromPositions(objectPair, isExpanding, Parameters.fieldStrength(isExpanding));
+
                 if (counter % 50 == 0)
-                    Dispatcher.InvokeAsync(() => UpdateUserInterface(), System.Windows.Threading.DispatcherPriority.Background);
+                    Dispatcher.InvokeAsync(() => UpdateUserInterface(externalField), System.Windows.Threading.DispatcherPriority.Background);
 
                 engageThePerpendicularity = isExpanding;
-                UpdateExternalField();
 
                 counter++;
 
+                void Log(string message) => Dispatcher.Invoke(() => LogItems.Items.Add($"{counter}: {message}"), System.Windows.Threading.DispatcherPriority.SystemIdle);
+
+                if (isExpanding != wasExpanding)
+                {
+                    //Log($"Previous simulation was {(wasExpanding ? "" : "not ")}expanding, next simulation will be {(isExpanding ? "" : "not ")}expanding.");
+                }
+
+                if (lastPair == objectPair)
+                {
+                    Log("Position of objects is unchanged from previous simulation.");
+                }
+
                 // If o.Position does not equal itself, o.Position is NaN.  
                 // At this point, the simulation is not giving us useful information, so stop simulating.
-                return objectPair.Item1.Position == objectPair.Item1.Position &&
-                       objectPair.Item2.Position == objectPair.Item2.Position;
-            });
+                return objectPair != objectPair
+                    ? SimulationResult<SimulationState, ValueTuple>.NewEndSimulation(default)
+                    : SimulationResult<SimulationState, ValueTuple>.NewContinueSimulation(externalField, (isExpanding, objectPair));
+            }));
+
             MessageBox.Show("Simulation ended");
         }
 
@@ -183,12 +181,12 @@ public partial class MainWindow : Window
         PauseButton.IsEnabled = true;
     }
 
-    private void UpdateUserInterface()
+    private void UpdateUserInterface(Vector3 externalField)
     {
         var objects = (ITuple)objectPair;
         for (int i = 0; i < objects.Length; i++)
         {
-            var o = (Simulation.SimulatedObject)objects[i];
+            var o = (SimulatedObject)objects[i];
             var ballVisual = balls[i];
 
             var ballVisualTranslationGroup = (Transform3DGroup)ballVisual.Transform;
@@ -201,6 +199,16 @@ public partial class MainWindow : Window
         }
 
         RotateToFaceDirection((AxisAngleRotation3D)((RotateTransform3D)externalFieldArrow.Transform).Rotation, externalField);
+
+        if (textIsExpanding != engageThePerpendicularity)
+        {
+            ExpandingOrContracting.Dispatcher.Invoke(() =>
+            {
+                ExpandingOrContracting.Text = engageThePerpendicularity ? "Expanding" : "Contracting";
+            });
+
+            textIsExpanding = engageThePerpendicularity;
+        }
 
         static void RotateToFaceDirection(AxisAngleRotation3D arrowRotation, Vector3 direction)
         {

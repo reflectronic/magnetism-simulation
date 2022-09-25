@@ -1,7 +1,7 @@
-﻿module Vectors
+﻿module Simulation.Vectors
 
 [<Struct>]
-[<System.Diagnostics.DebuggerDisplay("(X = {X}, Y = {Y}, Z = {Z})")>]
+[<System.Diagnostics.DebuggerDisplay("(X={X}, Y={Y}, Z={Z})")>]
 type Vector3<[<Measure>] 'T> =
     val X: float<'T>;
     val Y: float<'T>;
@@ -58,8 +58,8 @@ let Cross(left: Vector3<'L>, right: Vector3<'R>) =
 let Length(vector: Vector3<'T>) =
     Dot(vector, vector) |> sqrt
 
-let StripUnits(vector: Vector3<'T>) =
-    Vector3(float vector.X, float vector.Y, float vector.Z)
-
 let Normalize(vector: Vector3<'T>) = 
-    vector / Length(vector)
+    if vector = Vector3.Zero 
+        then Vector3.Zero 
+    else
+        vector / Length(vector)
