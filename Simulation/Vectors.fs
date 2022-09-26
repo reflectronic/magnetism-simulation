@@ -1,4 +1,5 @@
 ﻿module Simulation.Vectors
+open NonStructuralComparison
 
 [<Struct>]
 [<System.Diagnostics.DebuggerDisplay("(X={X}, Y={Y}, Z={Z})")>]

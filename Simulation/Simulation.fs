@@ -3,6 +3,7 @@
 open FSharp.Data.UnitSystems.SI.UnitSymbols
 open Vectors
 open LanguagePrimitives
+open NonStructuralComparison
 
 open type System.Math
 
@@ -13,10 +14,10 @@ type SimulatedObject =
         Radius: float<m>
     }
     static member op_Equality (left: SimulatedObject, right: SimulatedObject) =
-        left = right
+        FSharp.Core.Operators.(=) left right
 
     static member op_Inequality (left: SimulatedObject, right: SimulatedObject) =
-        left <> right
+        FSharp.Core.Operators.(<>) left right
 
 module Calculate =
     let inline internal pow5 v = v * v * v * v * v
@@ -61,53 +62,53 @@ module Simulation =
                           isExpanding: bool)
                           state
                           callback =
-        let struct(l, s) = pair
+            let struct(l, s) = pair
 
-        let magneticMoment (o: SimulatedObject) =
-            let volume = (4./3.) * PI * (o.Radius |> cubed)
-            (externalBField / Mu_0) * volume / 3.
+            let magneticMoment (o: SimulatedObject) =
+                let volume = (4./3.) * PI * (o.Radius |> cubed)
+                (externalBField / Mu_0) * volume / 3.
         
-        let largeMagneticForce = magneticForce(l.Position - s.Position, magneticMoment(l), magneticMoment(s))
+            let largeMagneticForce = magneticForce(l.Position - s.Position, magneticMoment(l), magneticMoment(s))
 
-        let forwardThreshold = 0.012<N>
-        let sigma = forwardThreshold / ((PI / 4.) * ((3.2e-3<m>) |> squared))
+            let forwardThreshold = 0.012<N>
+            let sigma = forwardThreshold / ((PI / 4.) * ((3.2e-3<m>) |> squared))
 
-        let backwardsThreshold = 0.008<N>
-        let lambda = backwardsThreshold / (3.2e-3<m>)
+            let backwardsThreshold = 0.008<N>
+            let lambda = backwardsThreshold / (3.2e-3<m>)
 
-        let gamma = 0.004<N> / (3.2e-3<m> * 0.5e-3<m/s>)
+            let gamma = 0.004<N> / (3.2e-3<m> * 0.5e-3<m/s>)
 
-        let tearingVelocityMagnitude (force: Vector3<N>, threshold: float<N>, diameter: float<m>) = 
-            let mag = (Length(force) - threshold) / (gamma * diameter)
-            if mag >= 0.<m/s> && (Abs(float force.X) >= float threshold) then
-                mag
-            else
-                0.<m/s>
-
-        let diameter (o: SimulatedObject) = o.Radius * 2.
-        let largeVelocity = 
-            let largeThreshold = 
-                if isExpanding then 
-                    sigma * (diameter(l) |> squared)
+            let tearingVelocityMagnitude (force: Vector3<N>, threshold: float<N>, diameter: float<m>) = 
+                let mag = (Length(force) - threshold) / (gamma * diameter)
+                if mag >= 0.<m/s> && (Abs(float force.X) >= float threshold) then
+                    mag
                 else
-                    lambda * diameter(l)
-            Normalize(largeMagneticForce) * tearingVelocityMagnitude (largeMagneticForce, largeThreshold, diameter(l)) 
+                    0.<m/s>
+
+            let diameter (o: SimulatedObject) = o.Radius * 2.
+            let largeVelocity = 
+                let largeThreshold = 
+                    if isExpanding then 
+                        sigma * (diameter(l) |> squared)
+                    else
+                        lambda * diameter(l)
+                Normalize(largeMagneticForce) * tearingVelocityMagnitude (largeMagneticForce, largeThreshold, diameter(l)) 
 
 
-        let smallVelocity = 
-            let smallMagneticForce = -largeMagneticForce
-            let smallThreshold = lambda * diameter(s)
-            Normalize(smallMagneticForce) * tearingVelocityMagnitude (smallMagneticForce, smallThreshold, diameter(s))
+            let smallVelocity = 
+                let smallMagneticForce = -largeMagneticForce
+                let smallThreshold = lambda * diameter(s)
+                Normalize(smallMagneticForce) * tearingVelocityMagnitude (smallMagneticForce, smallThreshold, diameter(s))
 
-        let pair = struct( 
-            { l with Position = l.Position + largeVelocity * dt }, 
-            { s with Position = s.Position + smallVelocity * dt })
+            let pair = struct( 
+                    { l with Position = l.Position + largeVelocity * dt }, 
+                    { s with Position = s.Position + smallVelocity * dt })
                     
-        // If we are currently expanding, we should start contracting when the large ball can no longer overcome the threshold.
-        // If we are currently contracting, we should start expanding when the large ball begins to overcome its threshold.
-        // If the external field is zero, the balls cannot be moving, so we cannot make a determination about the direction of the fields. Carry the previous state forward.
-        let shouldExpand = if externalBField <> Vector3.Zero then Length(largeVelocity) <> 0.<m/s> else isExpanding
-
-        match callback struct(pair, shouldExpand, state) with
-        | ContinueSimulation(field, state) -> run (pair, dt, field, shouldExpand) state callback
-        | EndSimulation(result) -> result
+            // If we are currently expanding, we should start contracting when the large ball can no longer overcome the threshold.
+            // If we are currently contracting, we should start expanding when the large ball begins to overcome its threshold.
+            // If the external field is zero, the balls cannot be moving, so we cannot make a determination about the direction of the fields. Carry the previous state forward.
+            let shouldExpand = if externalBField <> Vector3.Zero then Length(largeVelocity) <> 0.<m/s> else isExpanding
+    
+            match callback struct(pair, shouldExpand, state) with
+            | ContinueSimulation(field, state) -> run (pair, dt, field, shouldExpand) state callback
+            | EndSimulation(result) -> result
