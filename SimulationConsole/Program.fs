@@ -13,7 +13,7 @@ open FSharp.Collections.ParallelSeq
 open NonStructuralComparison
 
 let fieldStrengths =
-    Array2D.init 500 500 (fun x y -> 
+    Array2D.init 100 100 (fun x y -> 
         struct((float x * 0.01<T>) + 0.2<T>, (float y * 0.01<T>) + 0.2<T>)
     ) 
     |> Seq.cast<struct(float<T> * float<T>)>
@@ -57,7 +57,7 @@ let validResults =
                     | (1, InitialExpansion) -> ContractionStart(s.Position)
                     | (2, ContractionStart(smallStart)) -> ContractionEnd(s.Position - smallStart, l.Position)
                     | (3, ContractionEnd(smallPositionChange, largeStart)) -> ExpansionEnd((Length(l.Position - largeStart))/ (Length(smallPositionChange)))
-                    | (_, _) -> raise (System.Diagnostics.UnreachableException())
+                    | (_, _) -> raise (UnreachableException())
 
             match result with
             | _ when checkpoint <> 0 && not wasExpanding && wasPreviouslyExpanding && lastL <> l -> EndSimulation(nan, count)
@@ -84,5 +84,5 @@ for result in validResults do
     printfn $"|{strengths,-50}|{contracting/expanding,22}|{me,22}|{count,10}"
     System.IO.File.AppendAllText(outputPath, $"%O{contracting},%O{expanding},%O{contracting/expanding},%O{me},%O{count}\n")
 
-System.Media.SystemSounds.Beep.Play()
+Media.SystemSounds.Beep.Play()
 printfn "%A" stopwatch.Elapsed

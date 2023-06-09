@@ -7,7 +7,7 @@
   <ItemGroup>
     <Compile Include="Vectors.fs" />
     <Compile Include="Simulation.fs" />
-	<Compile Include="Parameters.fs" />
+	  <Compile Include="Parameters.fs" />
   </ItemGroup>
 
 </Project>
