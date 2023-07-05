@@ -139,13 +139,22 @@ public partial class MainWindow : Window
             {
                 unpauseEvent.Wait();
 
+
                 var (objectPair, isExpanding, (wasExpanding, lastPair)) = parameters;
                 this.objectPair = objectPair;
 
-                var externalField = Calculate.BFromPositions(objectPair, isExpanding, Parameters.fieldStrength(isExpanding));
+                // var straightField = Calculate.BFromPositions(objectPair, isExpanding, Parameters.fieldStrength(isExpanding));
+                var perpField = new Vector3(0, 0, 1);
+
+                var rotMat = default(Matrix3D);
+                rotMat.Rotate(new Quaternion(new Vector3D(0, 1, 0), 35));
+                var externalField = (perpField.AsVector3D() * rotMat).AsVector();
 
                 if (counter % 50 == 0)
+                {
                     Dispatcher.InvokeAsync(() => UpdateUserInterface(externalField), System.Windows.Threading.DispatcherPriority.Background);
+                    Thread.Sleep(2);
+                }
 
                 engageThePerpendicularity = isExpanding;
 
@@ -156,11 +165,11 @@ public partial class MainWindow : Window
                 if (isExpanding != wasExpanding)
                 {
                     //Log($"Previous simulation was {(wasExpanding ? "" : "not ")}expanding, next simulation will be {(isExpanding ? "" : "not ")}expanding.");
-                }
+                }   
 
-                if (lastPair == objectPair)
+                if (Length(lastPair.Item1.Position - lastPair.Item2.Position) == Length(objectPair.Item1.Position - objectPair.Item2.Position))
                 {
-                    Log("Position of objects is unchanged from previous simulation.");
+                   Log("Objects have gotten further away.");
                 }
 
                 // If o.Position does not equal itself, o.Position is NaN.  

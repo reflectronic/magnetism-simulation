@@ -67,7 +67,7 @@ module Simulation =
             let magneticMoment (o: SimulatedObject) =
                 let volume = (4./3.) * PI * (o.Radius |> cubed)
                 (externalBField / Mu_0) * volume / 3.
-        
+
             let largeMagneticForce = magneticForce(l.Position - s.Position, magneticMoment(l), magneticMoment(s))
 
             let forwardThreshold = 0.012<N>
@@ -107,7 +107,8 @@ module Simulation =
             // If we are currently expanding, we should start contracting when the large ball can no longer overcome the threshold.
             // If we are currently contracting, we should start expanding when the large ball begins to overcome its threshold.
             // If the external field is zero, the balls cannot be moving, so we cannot make a determination about the direction of the fields. Carry the previous state forward.
-            let shouldExpand = if externalBField <> Vector3.Zero then Length(largeVelocity) <> 0.<m/s> else isExpanding
+            // let shouldExpand = if externalBField <> Vector3.Zero then Length(largeVelocity) <> 0.<m/s> else isExpanding
+            let shouldExpand = true
     
             match callback struct(pair, shouldExpand, state) with
             | ContinueSimulation(field, state) -> run (pair, dt, field, shouldExpand) state callback
