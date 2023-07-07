@@ -57,19 +57,6 @@ public partial class MainWindow : Window
 
     private void Create_Click(object sender, RoutedEventArgs e)
     {
-        static GeometryModel3D CreateFrozenModel(MeshBuilder builder, Brush brush)
-        {
-            brush.Freeze();
-            Material material = new DiffuseMaterial(brush);
-            material.Freeze();
-
-            var mesh = builder.ToMesh(freeze: true);
-            var model = new GeometryModel3D(mesh, material);
-            model.Freeze();
-
-            return model;
-        }
-
         CreateResourcesButton.IsEnabled = false;
         
         var sphereBuilder = new MeshBuilder();
@@ -95,7 +82,7 @@ public partial class MainWindow : Window
             var sphereModel = CreateFrozenModel(sphereBuilder, new SolidColorBrush(randomColor) { Opacity = 0.75 });
             var pathArrowModel = CreateFrozenModel(pathArrowBuilder, new SolidColorBrush(randomColor.ChangeIntensity(0.8)) { Opacity = 0.25 });
 
-            var visualRadius = ((Simulation.SimulatedObject)objects[i]).Radius * 1000;
+            var visualRadius = ((SimulatedObject)objects[i]).Radius * 1000;
             balls[i] = new ModelVisual3D
             {
                 Content = sphereModel,
@@ -124,6 +111,19 @@ public partial class MainWindow : Window
         });
     }
 
+    private static GeometryModel3D CreateFrozenModel(MeshBuilder builder, Brush brush)
+    {
+        brush.Freeze();
+        Material material = new DiffuseMaterial(brush);
+        material.Freeze();
+
+        var mesh = builder.ToMesh(freeze: true);
+        var model = new GeometryModel3D(mesh, material);
+        model.Freeze();
+
+        return model;
+    }
+
     private void Begin_Click(object sender, RoutedEventArgs e)
     {
         BeginSimulationButton.IsEnabled = false;
@@ -131,29 +131,44 @@ public partial class MainWindow : Window
         {
             int counter = 0;
             Simulation.Simulation.run(objectPair,
-                0.000001, // dt: 1 microsecond
+                0.0001, // dt: 1 microsecond
                 Vector3.Zero,
                 true, // start the balls by expanding.
                 (true, objectPair), // wasExpanding is true.
-                callback: FuncConvert.FromFunc<(ObjectPair, bool, SimulationState), SimulationResult<SimulationState, ValueTuple>>((parameters) =>
+                callback: FuncConvert.FromFunc<(ObjectPair, bool, (FSharpOption<(Vector3, Vector3)>, FSharpOption<(Vector3, Vector3)>, SimulationState)), SimulationResult<SimulationState, ValueTuple>>((parameters) =>
             {
                 unpauseEvent.Wait();
 
 
-                var (objectPair, isExpanding, (wasExpanding, lastPair)) = parameters;
+                var (objectPair, isExpanding, (c1, c2, (wasExpanding, lastPair))) = parameters;
                 this.objectPair = objectPair;
 
-                // var straightField = Calculate.BFromPositions(objectPair, isExpanding, Parameters.fieldStrength(isExpanding));
-                var perpField = new Vector3(0, 0, 1);
+                var externalField = Calculate.BFromPositions(objectPair, isExpanding, Parameters.fieldStrength(isExpanding));
+                /*var perpField = new Vector3(0, 0, 1);
 
                 var rotMat = default(Matrix3D);
-                rotMat.Rotate(new Quaternion(new Vector3D(0, 1, 0), 35));
-                var externalField = (perpField.AsVector3D() * rotMat).AsVector();
+                rotMat.Rotate(new Quaternion(new Vector3D(0, 1, 0), 20));
+                var externalField = (perpField.AsVector3D() * rotMat).AsVector();*/
 
-                if (counter % 50 == 0)
+                if (counter % 5 == 0)
                 {
-                    Dispatcher.InvokeAsync(() => UpdateUserInterface(externalField), System.Windows.Threading.DispatcherPriority.Background);
-                    Thread.Sleep(2);
+                    
+                    Dispatcher.InvokeAsync(() =>
+                    {
+                        UpdateUserInterface(externalField);
+                        if (c1 != null)
+                        {
+                            var (p1, p2) = c1.Value;
+                            AddCylinder(p1, p2, objectPair.Item1.Radius);
+                        }
+
+                        if (c2 != null)
+                        {
+                            var (p1, p2) = c2.Value;
+                            AddCylinder(p1, p2, objectPair.Item2.Radius);
+                        }
+
+                    }, System.Windows.Threading.DispatcherPriority.Background);
                 }
 
                 engageThePerpendicularity = isExpanding;
@@ -204,6 +219,10 @@ public partial class MainWindow : Window
             var position = o.Position * 1000;
             var positions = (position.X, position.Y, position.Z);
 
+            // var newPt = o.Path.Head;
+            // var oldPt = o.Path.Tail.Head;
+            // AddCylinder(newPt.Position, oldPt.Position, newPt.Radius);
+
             (ballVisualTranslation.OffsetX, ballVisualTranslation.OffsetY, ballVisualTranslation.OffsetZ) = positions;
         }
 
@@ -251,6 +270,14 @@ public partial class MainWindow : Window
             arrowRotation.Axis = rotationAxis.AsVector3D();
             arrowRotation.Angle = (180 / Math.PI) * rotationAngle;
         }
+    }
+
+    private void AddCylinder(Vector3 pt1, Vector3 pt2, double radius)
+    {
+        var builder = new MeshBuilder();
+        builder.AddCylinder((pt1.AsVector3D() * 1000).ToPoint3D(), (pt2.AsVector3D() * 1000).ToPoint3D(), radius * 1000);
+        var model = CreateFrozenModel(builder, new SolidColorBrush(Colors.GreenYellow));
+        Viewport.Children.Add(new ModelVisual3D { Content = model });
     }
 
     private void Pause_Click(object sender, RoutedEventArgs e)

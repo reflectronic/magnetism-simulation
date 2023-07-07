@@ -12,8 +12,8 @@
         <HelixToolkit:HelixViewport3D x:Name="Viewport" CameraMode="WalkAround" ClipToBounds="false" ModelUpDirection="0,0,1" ShowFieldOfView="True">
             <ModelVisual3D>
                 <ModelVisual3D.Content>
-                    <DirectionalLight Color="LightGray" Direction="-0.612372,-0.5,-0.612372" />
-                    <!--AmbientLight Color="DarkGray" /-->
+                    <!--DirectionalLight Color="LightGray" Direction="-0.612372,-0.5,-0.612372" /-->
+                    <AmbientLight Color="DarkGray" />
                 </ModelVisual3D.Content>
             </ModelVisual3D>
             <HelixToolkit:GridLinesVisual3D MinorDistance="2" MajorDistance="10" />
