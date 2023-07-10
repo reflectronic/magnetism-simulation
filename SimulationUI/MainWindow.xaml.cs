@@ -135,7 +135,7 @@ public partial class MainWindow : Window
                 Vector3.Zero,
                 true, // start the balls by expanding.
                 (true, objectPair), // wasExpanding is true.
-                callback: FuncConvert.FromFunc<(ObjectPair, bool, (FSharpOption<(Vector3, Vector3)>, FSharpOption<(Vector3, Vector3)>, SimulationState)), SimulationResult<SimulationState, ValueTuple>>((parameters) =>
+                callback: FuncConvert.FromFunc<(ObjectPair, bool, (FSharpOption<Tuple<Vector3, Vector3>>, FSharpOption<Tuple<Vector3, Vector3>>, SimulationState)), SimulationResult<SimulationState, ValueTuple>>((parameters) =>
             {
                 unpauseEvent.Wait();
 
@@ -156,7 +156,7 @@ public partial class MainWindow : Window
                     Dispatcher.InvokeAsync(() =>
                     {
                         UpdateUserInterface(externalField);
-                        if (c1 != null)
+                        /*if (c1 != null)
                         {
                             var (p1, p2) = c1.Value;
                             AddCylinder(p1, p2, objectPair.Item1.Radius);
@@ -166,7 +166,7 @@ public partial class MainWindow : Window
                         {
                             var (p1, p2) = c2.Value;
                             AddCylinder(p1, p2, objectPair.Item2.Radius);
-                        }
+                        }*/
 
                     }, System.Windows.Threading.DispatcherPriority.Background);
                 }
@@ -177,14 +177,14 @@ public partial class MainWindow : Window
 
                 void Log(string message) => Dispatcher.Invoke(() => LogItems.Items.Add($"{counter}: {message}"), System.Windows.Threading.DispatcherPriority.SystemIdle);
 
-                if (isExpanding != wasExpanding)
+                //if (isExpanding != wasExpanding)
                 {
                     //Log($"Previous simulation was {(wasExpanding ? "" : "not ")}expanding, next simulation will be {(isExpanding ? "" : "not ")}expanding.");
                 }   
 
-                if (Length(lastPair.Item1.Position - lastPair.Item2.Position) == Length(objectPair.Item1.Position - objectPair.Item2.Position))
+                //if (Length(lastPair.Item1.Position - lastPair.Item2.Position) == Length(objectPair.Item1.Position - objectPair.Item2.Position))
                 {
-                   Log("Objects have gotten further away.");
+                   //Log("Objects have gotten further away.");
                 }
 
                 // If o.Position does not equal itself, o.Position is NaN.  

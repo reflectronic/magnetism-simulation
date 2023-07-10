@@ -56,6 +56,7 @@ module Calculate =
         fieldDirection * fieldStrength
 
 open Calculate
+open FSharp.Collections.ParallelSeq
 
 [<Struct>]
 type SimulationResult<'a, 'b> =
@@ -73,30 +74,10 @@ module Simulation =
 
         let distance pt1 pt2 = Length(pt1 - pt2)
 
+        let angleBetween cylDir magneticForce = acos(Dot(cylDir, magneticForce) / (Length(cylDir) * Length(magneticForce)))
+
         let minBy projection v1 v2 = 
             if projection v1 < projection v2 then v1, v2 else v2, v1
-
-
-        let magneticMoment (o: SimulatedObject) =
-            let volume = (4./3.) * PI * (o.Radius |> cubed)
-            (externalBField / Mu_0) * volume / 3.
-
-        let largeMagneticForce = magneticForce(l.Position - s.Position, magneticMoment(l), magneticMoment(s))
-
-        let forwardThreshold = 0.012<N>
-        let sigma = forwardThreshold / ((PI / 4.) * ((3.2e-3<m>) |> squared))
-
-        let backwardsThreshold = 0.008<N>
-        let lambda = backwardsThreshold / (3.2e-3<m>)
-
-        let gamma = 0.004<N> / (3.2e-3<m> * 0.5e-3<m/s>)
-
-        let tearingVelocityMagnitude (force: Vector3<N>, threshold: float<N>, diameter: float<m>) = 
-            let mag = (Length(force) - threshold) / (gamma * diameter)
-            if mag >= 0.<m/s> && (Abs(float force.X) >= float threshold) then
-                mag
-            else
-                0.<m/s>
 
         let cylinders o = 
             let rec makeCyls (pt: PathFace) rest cyls =
@@ -108,7 +89,7 @@ module Simulation =
 
                     if canIntersect pt && canIntersect next then
                         match rest with 
-                        | next::rest -> let cyl = struct(pt.Position, next.Position) in makeCyls next rest (cyl::cyls)
+                        | next::rest -> let cyl = (pt.Position, next.Position) in makeCyls next rest (cyl::cyls)
                         | _ -> cyls
                     else
                         makeCyls next rest cyls
@@ -118,11 +99,17 @@ module Simulation =
             | pt::rest -> makeCyls pt rest []
             | _ -> []
 
+        let trySkip l = 
+            match l with
+            | [] -> []
+            | _ -> List.tail l
+
         let cylinder o magneticForce =
             cylinders o
-            |> List.where (fun c ->
+            |> trySkip
+            |> PSeq.filter (fun c ->
                 let toSphere = distance o.Position
-                let struct(startPt, endPt) = c
+                let (startPt, endPt) = c
 
                 let (closer, further) = minBy toSphere startPt endPt
                 let planeNormal = Normalize(further - closer)
@@ -134,30 +121,88 @@ module Simulation =
                 let centerToPlanarCenter = Length(projectedPoint - o.Position)
                 let l = o.Radius * sin(acos(centerToPlanarCenter / o.Radius))
                 centerToPlanarCenter < o.Radius && Length(projectedPoint - closer) <= o.Radius + l)
-            |> List.map (fun m -> 
-                let struct(pt1, pt2) = m
+            |> PSeq.map (fun c ->
+                let (pt1, pt2) = c
                 let cylDir = pt1 - pt2
-                let angleBetween = acos(Dot(cylDir, magneticForce) / (Length(cylDir) * Length(magneticForce)))
-                m, if (angleBetween > (PI / 2.0)) then PI - angleBetween else angleBetween)
-            |> List.sortBy (fun m -> snd m)
-            |> List.tryPick (fun m -> let (cyl, angle) = m in if angle > 1.0 then None else Some(cyl))
+
+                let betweenForce = angleBetween magneticForce
+                let thetaForceCyl = betweenForce cylDir
+                let thetaForceCap = min (betweenForce (pt1 - o.Position)) (betweenForce (pt2 - o.Position))
+                c, thetaForceCap, if (thetaForceCyl > (PI / 2.0)) then PI - thetaForceCyl else thetaForceCyl)
+            |> PSeq.sortBy (fun c -> let (_, _, thetaForceCyl) = c in thetaForceCyl)
+            |> PSeq.tryFind (fun c -> let (cyl, thetaForceCap, thetaForceCyl) = c in thetaForceCap < 1.0 && thetaForceCyl < 1.0)
+            |> Option.map (fun c -> let (cyl, _, _) = c in cyl)
+
+        let magneticMoment (o: SimulatedObject) =
+            let volume = (4./3.) * PI * (o.Radius |> cubed)
+            (externalBField / Mu_0) * volume / 3.
+
+        let lMagneticForce = magneticForce(l.Position - s.Position, magneticMoment(l), magneticMoment(s))
+        let sMagneticForce = -lMagneticForce
+
+        let forwardThreshold = 0.012<N>
+        let sigma = forwardThreshold / ((PI / 4.) * ((3.2e-3<m>) |> squared))
+
+        let backwardsThreshold = 0.008<N>
+        let lambda = backwardsThreshold / (3.2e-3<m>)
+
+        let gamma = 0.004<N> / (3.2e-3<m> * 0.5e-3<m/s>)
+
+        let lCyl = cylinder l lMagneticForce
+        let sCyl = cylinder s sMagneticForce
 
         let diameter (o: SimulatedObject) = o.Radius * 2.
+
+        let tearingVelocityMagnitude (force: Vector3<N>, threshold: float<N>, diameter: float<m>) = 
+            let mag = (Length(force) - threshold) / (gamma * diameter)
+            if mag >= 0.<m/s> && (Abs(float force.X) >= float threshold) then
+                mag
+            else
+                0.<m/s>
+
+        let project a b v = 
+            let ab = b - a
+            let abNorm = Normalize(ab)
+            Dot(v, abNorm) * abNorm
+
+        let projectForce cyl force =
+            match cyl with
+            | Some cyl -> let (pt1, pt2) = cyl in project pt2 pt1 force
+            | None -> force
+
         let lVelocity = 
             let largeThreshold = 
-                if isExpanding then 
+                if lCyl.IsNone then 
                     sigma * (diameter(l) |> squared)
                 else
                     lambda * diameter(l)
-            Normalize(largeMagneticForce) * tearingVelocityMagnitude (largeMagneticForce, largeThreshold, diameter(l)) 
 
-        let smallMagneticForce = -largeMagneticForce
+            let projectedMagneticForce = projectForce lCyl lMagneticForce
+            Normalize(projectedMagneticForce) * tearingVelocityMagnitude (projectedMagneticForce, largeThreshold, diameter(l)) 
+
         let sVelocity = 
-            let smallThreshold = lambda * diameter(s)
-            Normalize(smallMagneticForce) * tearingVelocityMagnitude (smallMagneticForce, smallThreshold, diameter(s))
+            let smallThreshold =
+                if sCyl.IsNone then 
+                    sigma * (diameter(s) |> squared)
+                else
+                    lambda * diameter(s)
 
-        let lPos = l.Position + lVelocity * dt
-        let sPos = s.Position + sVelocity * dt
+            let projectedMagneticForce = projectForce sCyl sMagneticForce
+            Normalize(projectedMagneticForce) * tearingVelocityMagnitude (sMagneticForce, smallThreshold, diameter(s))
+
+        let projectPoint a b p =
+            let ab = b - a
+            a + Dot(p - a, ab) / Dot(ab, ab) * (ab)
+
+        let lPos = lVelocity * dt +
+            match lCyl with 
+            | Some cyl -> let (pt1, pt2) = cyl in projectPoint pt1 pt2 l.Position
+            | None -> l.Position
+
+        let sPos = sVelocity * dt +
+            match sCyl with
+            | Some cyl -> let (pt1, pt2) = cyl in projectPoint pt1 pt2 s.Position
+            | None -> s.Position
 
         let pathFace o p =
             { Position = p; Radius = o.Radius }
@@ -167,9 +212,6 @@ module Simulation =
                             Path = (pathFace l lPos)::l.Path }, 
                 { s with Position = sPos;
                             Path = (pathFace s sPos)::s.Path })
-
-        let lCyl = cylinder l largeMagneticForce
-        let sCyl = cylinder s smallMagneticForce
 
         // If we are currently expanding, we should start contracting when the large ball can no longer overcome the threshold.
         // If we are currently contracting, we should start expanding when the large ball begins to overcome its threshold.
