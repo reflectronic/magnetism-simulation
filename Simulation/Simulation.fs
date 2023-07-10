@@ -74,25 +74,20 @@ module Simulation =
 
         let distance pt1 pt2 = Length(pt1 - pt2)
 
-        let angleBetween cylDir magneticForce = acos(Dot(cylDir, magneticForce) / (Length(cylDir) * Length(magneticForce)))
-
-        let minBy projection v1 v2 = 
-            if projection v1 < projection v2 then v1, v2 else v2, v1
+        let angleBetween cylDir magneticForce = Acos(Dot(cylDir, magneticForce) / (Length(cylDir) * Length(magneticForce)))
 
         let cylinders o = 
-            let rec makeCyls (pt: PathFace) rest cyls =
-                // pt was collected after next
-                match rest with 
-                | next::rest ->
-                    let canIntersect (pt: PathFace) = 
-                        pt.Radius + o.Radius > distance pt.Position o.Position
+            let rec makeCyls (endPt: PathFace) rest cyls =
+                let canIntersect (pt: PathFace) = 
+                    pt.Radius + o.Radius > distance pt.Position o.Position
 
-                    if canIntersect pt && canIntersect next then
-                        match rest with 
-                        | next::rest -> let cyl = (pt.Position, next.Position) in makeCyls next rest (cyl::cyls)
-                        | _ -> cyls
+                match rest with 
+                | startPt::rest ->
+                    if canIntersect endPt || canIntersect startPt then
+                        let cyl = (endPt.Position, startPt.Position)
+                        makeCyls startPt rest (cyl::cyls)
                     else
-                        makeCyls next rest cyls
+                        makeCyls startPt rest cyls
                 | _ -> cyls
                     
             match o.Path with 
@@ -109,6 +104,9 @@ module Simulation =
             |> trySkip
             |> PSeq.filter (fun c ->
                 let toSphere = distance o.Position
+                let minBy projection v1 v2 = 
+                    if projection v1 < projection v2 then v1, v2 else v2, v1
+
                 let (startPt, endPt) = c
 
                 let (closer, further) = minBy toSphere startPt endPt
