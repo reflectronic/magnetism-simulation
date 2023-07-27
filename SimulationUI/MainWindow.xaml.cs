@@ -20,6 +20,7 @@ using Microsoft.FSharp.Core;
 
 using ObjectPair = System.ValueTuple<Simulation.SimulatedObject, Simulation.SimulatedObject>;
 using SimulationState = System.ValueTuple<bool, System.ValueTuple<Simulation.SimulatedObject, Simulation.SimulatedObject>>;
+using System.Collections.Generic;
 
 namespace SimulationUI;
 
@@ -44,21 +45,21 @@ public partial class MainWindow : Window
     ModelVisual3D externalFieldArrow;
 
     readonly ManualResetEventSlim unpauseEvent = new(initialState: true /* signaled */, spinCount: 0);
-    
+
     readonly Color[] colors = typeof(Colors).GetProperties(BindingFlags.Public | BindingFlags.Static)
         .Where(a => a.PropertyType == typeof(Color))
         .Select(a => (Color)a.GetValue(null))
+        .Where(c => c != Colors.Transparent)
         .ToArray();
 
-    bool engageThePerpendicularity = true;
-    bool? textIsExpanding;
+    double angle;
+    bool doExpandButton;
+    bool queuedForRotation;
 
     (SimulatedObject, SimulatedObject) objectPair = Parameters.standardObjects();
 
-    private void Create_Click(object sender, RoutedEventArgs e)
+    private void CreateResources()
     {
-        CreateResourcesButton.IsEnabled = false;
-        
         var sphereBuilder = new MeshBuilder();
         sphereBuilder.AddSphere(new(0, 0, 0));
 
@@ -126,7 +127,14 @@ public partial class MainWindow : Window
 
     private void Begin_Click(object sender, RoutedEventArgs e)
     {
-        BeginSimulationButton.IsEnabled = false;
+        CreateResources();
+        BeginSimulationButton.Visibility = Visibility.Collapsed;
+        ExpandingOrContracting.IsChecked = doExpandButton = true;
+        QueueRotation.IsChecked = queuedForRotation = false;
+
+        HashSet<Tuple<Vector3, Vector3>> tuples1 = new();
+        HashSet<Tuple<Vector3, Vector3>> tuples2 = new();
+
         void ThreadStart()
         {
             int counter = 0;
@@ -134,64 +142,64 @@ public partial class MainWindow : Window
                 0.0001, // dt: 1 microsecond
                 Vector3.Zero,
                 true, // start the balls by expanding.
-                (true, objectPair), // wasExpanding is true.
-                callback: FuncConvert.FromFunc<(ObjectPair, bool, (FSharpOption<Tuple<Vector3, Vector3>>, FSharpOption<Tuple<Vector3, Vector3>>, SimulationState)), SimulationResult<SimulationState, ValueTuple>>((parameters) =>
+                (true, objectPair), // wasExpanding is true.,
+                iter: 0,
+                callback: FuncConvert.FromFunc<(ObjectPair, bool, (FSharpOption<Tuple<Vector3, Vector3>>, FSharpOption<Tuple<Vector3, Vector3>>, Vector3, SimulationState)), SimulationResult<SimulationState, ValueTuple>>((parameters) =>
             {
                 unpauseEvent.Wait();
 
+                counter++;
 
-                var (objectPair, isExpanding, (c1, c2, (wasExpanding, lastPair))) = parameters;
+                var (objectPair, shouldExpand, (c1, c2, magneticForce, (wasExpanding, lastPair))) = parameters;
                 this.objectPair = objectPair;
 
-                var externalField = Calculate.BFromPositions(objectPair, isExpanding, Parameters.fieldStrength(isExpanding));
-                /*var perpField = new Vector3(0, 0, 1);
+                bool willExpand = shouldExpand == wasExpanding ? doExpandButton : Dispatcher.Invoke(() => (ExpandingOrContracting.IsChecked = doExpandButton = shouldExpand).Value);
+                var dist = Length(objectPair.Item2.Position - objectPair.Item1.Position);
 
-                var rotMat = default(Matrix3D);
-                rotMat.Rotate(new Quaternion(new Vector3D(0, 1, 0), 20));
-                var externalField = (perpField.AsVector3D() * rotMat).AsVector();*/
+                var effectiveAngle = /*dist <= 0.01050 &&*/ queuedForRotation
+                        ? angle / 57.2957795
+                        : 0;
 
-                if (counter % 5 == 0)
+                var externalField = Calculate.BFromPositions(objectPair, willExpand,
+                    effectiveAngle,
+                    Parameters.fieldStrength(willExpand) / ((queuedForRotation && !willExpand) ? double.Pow(double.Cos(effectiveAngle), 3) : 1));
+
+                if (counter % 40 == 0)
                 {
-                    
                     Dispatcher.InvokeAsync(() =>
                     {
                         UpdateUserInterface(externalField);
-                        /*if (c1 != null)
+
+                        /*if (c1 != null && tuples1.Add(c1.Value))
                         {
                             var (p1, p2) = c1.Value;
                             AddCylinder(p1, p2, objectPair.Item1.Radius);
                         }
-
-                        if (c2 != null)
+    
+                        if (c2 != null && tuples2.Add(c2.Value))
                         {
                             var (p1, p2) = c2.Value;
                             AddCylinder(p1, p2, objectPair.Item2.Radius);
                         }*/
 
+                        DistanceText.Text = Length(magneticForce).ToString("0.00000");
+
                     }, System.Windows.Threading.DispatcherPriority.Background);
                 }
 
-                engageThePerpendicularity = isExpanding;
+                void Log(string message) => Dispatcher.InvokeAsync(() => LogItems.Items.Add($"{counter}: {message}"), System.Windows.Threading.DispatcherPriority.SystemIdle);
 
-                counter++;
-
-                void Log(string message) => Dispatcher.Invoke(() => LogItems.Items.Add($"{counter}: {message}"), System.Windows.Threading.DispatcherPriority.SystemIdle);
-
-                //if (isExpanding != wasExpanding)
+                var hasNotMoved = lastPair.Item1.Position == objectPair.Item1.Position && lastPair.Item2.Position == objectPair.Item2.Position;
+                if (hasNotMoved)
                 {
-                    //Log($"Previous simulation was {(wasExpanding ? "" : "not ")}expanding, next simulation will be {(isExpanding ? "" : "not ")}expanding.");
-                }   
-
-                //if (Length(lastPair.Item1.Position - lastPair.Item2.Position) == Length(objectPair.Item1.Position - objectPair.Item2.Position))
-                {
-                   //Log("Objects have gotten further away.");
+                   Log("Objects have stopped moving.");
                 }
 
-                // If o.Position does not equal itself, o.Position is NaN.  
+                // If o.Position does not equal itself, o.Position is NaN.
                 // At this point, the simulation is not giving us useful information, so stop simulating.
                 return objectPair != objectPair
                     ? SimulationResult<SimulationState, ValueTuple>.NewEndSimulation(default)
-                    : SimulationResult<SimulationState, ValueTuple>.NewContinueSimulation(externalField, (isExpanding, objectPair));
+                    : SimulationResult<SimulationState, ValueTuple>.NewContinueSimulation(externalField, (willExpand, objectPair));
             }));
 
             MessageBox.Show("Simulation ended");
@@ -219,31 +227,17 @@ public partial class MainWindow : Window
             var position = o.Position * 1000;
             var positions = (position.X, position.Y, position.Z);
 
-            // var newPt = o.Path.Head;
-            // var oldPt = o.Path.Tail.Head;
-            // AddCylinder(newPt.Position, oldPt.Position, newPt.Radius);
-
             (ballVisualTranslation.OffsetX, ballVisualTranslation.OffsetY, ballVisualTranslation.OffsetZ) = positions;
         }
 
         RotateToFaceDirection((AxisAngleRotation3D)((RotateTransform3D)externalFieldArrow.Transform).Rotation, externalField);
-
-        if (textIsExpanding != engageThePerpendicularity)
-        {
-            ExpandingOrContracting.Dispatcher.Invoke(() =>
-            {
-                ExpandingOrContracting.Text = engageThePerpendicularity ? "Expanding" : "Contracting";
-            });
-
-            textIsExpanding = engageThePerpendicularity;
-        }
 
         static void RotateToFaceDirection(AxisAngleRotation3D arrowRotation, Vector3 direction)
         {
             var directionA = Normalize(new Vector3(0, 0, 1));
             var directionB = Normalize(direction);
 
-            var rotationAngle = Math.Acos(Dot(directionA, directionB));
+            var rotationAngle = double.Acos(Dot(directionA, directionB));
             var rotationAxis = Cross(directionA, directionB);
 
             if (rotationAxis == Vector3.Zero)
@@ -251,24 +245,24 @@ public partial class MainWindow : Window
                 // We ran into a special case. The two vectors could either be perpendicular or parallel.
                 // We check the signs and rotate each component by 180 degrees if the signs of the components do not match.
 
-                if (Math.Sign(directionA.X) != Math.Sign(directionB.X))
+                if (double.Sign(directionA.X) != double.Sign(directionB.X))
                 {
                     rotationAxis = new Vector3(rotationAxis.X, 1, rotationAxis.Z);
                 }
 
-                if (Math.Sign(directionA.Y) != Math.Sign(directionB.Y))
+                if (double.Sign(directionA.Y) != double.Sign(directionB.Y))
                 {
                     rotationAxis = new Vector3(rotationAxis.X, rotationAxis.Y, 1);
                 }
 
-                if (Math.Sign(directionA.Z) != Math.Sign(directionB.Z))
+                if (double.Sign(directionA.Z) != double.Sign(directionB.Z))
                 {
                     rotationAxis = new Vector3(1, rotationAxis.Y, rotationAxis.Z);
                 }
             }
 
             arrowRotation.Axis = rotationAxis.AsVector3D();
-            arrowRotation.Angle = (180 / Math.PI) * rotationAngle;
+            arrowRotation.Angle = (180 / double.Pi) * rotationAngle;
         }
     }
 
@@ -276,7 +270,7 @@ public partial class MainWindow : Window
     {
         var builder = new MeshBuilder();
         builder.AddCylinder((pt1.AsVector3D() * 1000).ToPoint3D(), (pt2.AsVector3D() * 1000).ToPoint3D(), radius * 1000);
-        var model = CreateFrozenModel(builder, new SolidColorBrush(Colors.GreenYellow));
+        var model = CreateFrozenModel(builder, new SolidColorBrush(Colors.GreenYellow with { A = 50 }));
         Viewport.Children.Add(new ModelVisual3D { Content = model });
     }
 
@@ -294,8 +288,36 @@ public partial class MainWindow : Window
         }
     }
 
-    private void Flip_Click(object sender, RoutedEventArgs e)
+    private void AngleSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        engageThePerpendicularity = !engageThePerpendicularity;
+        angle = e.NewValue;
+    }
+
+    private void ExpandingOrContracting_Checked(object sender, RoutedEventArgs e)
+    {
+        doExpandButton = true;
+        ExpandingOrContracting.Content = "Expanding";
+    }
+
+    private void ExpandingOrContracting_Unchecked(object sender, RoutedEventArgs e)
+    {
+        doExpandButton = false;
+        ExpandingOrContracting.Content = "Contracting";
+    }
+
+    private void QueueRotation_Checked(object sender, RoutedEventArgs e)
+    {
+        queuedForRotation = true;
+        QueueRotation.Content = "Queued a rotation";
+
+        ExpandingOrContracting.IsChecked = true;
+        ExpandingOrContracting_Checked(null, null);
+    }
+
+    private void QueueRotation_Unchecked(object sender, RoutedEventArgs e)
+    {
+        queuedForRotation = false;
+        QueueRotation.Content = "Queue for rotation";
+
     }
 }

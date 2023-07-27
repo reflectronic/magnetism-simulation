@@ -6,9 +6,8 @@
         xmlns:HelixToolkit="clr-namespace:HelixToolkit.Wpf;assembly=HelixToolkit.Core.Wpf"
         xmlns:local="clr-namespace:SimulationUI"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
+        Title="MainWindow" Height="500" Width="900">
     <Grid>
-        <UniformGrid x:Name="VectorGrid" />
         <HelixToolkit:HelixViewport3D x:Name="Viewport" CameraMode="WalkAround" ClipToBounds="false" ModelUpDirection="0,0,1" ShowFieldOfView="True">
             <ModelVisual3D>
                 <ModelVisual3D.Content>
@@ -19,13 +18,15 @@
             <HelixToolkit:GridLinesVisual3D MinorDistance="2" MajorDistance="10" />
         </HelixToolkit:HelixViewport3D>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="20" Background="#DDFFFFFF">
-            <Button Click="Create_Click" x:Name="CreateResourcesButton">Create resources</Button>
-            <Button Click="Begin_Click" Margin="5,0,0,0" x:Name="BeginSimulationButton">Begin simulation</Button>
+            <Button Click="Begin_Click" x:Name="BeginSimulationButton">Begin simulation</Button>
             <Button Click="Pause_Click" Margin="5,0,0,0" x:Name="PauseButton" IsEnabled="False">Pause</Button>
-            <TextBox Background="Transparent" BorderThickness="0" IsReadOnly="True" TextWrapping="Wrap" x:Name="ExpandingOrContracting" Margin="5,0,0,0" />
+            <TextBox Background="Transparent" BorderThickness="0" IsReadOnly="True" TextWrapping="Wrap" x:Name="DistanceText" Margin="5,0,0,0" FontFamily="Global Monospace" FontWeight="Bold" FontSize="18">a</TextBox>
             <Expander Header="Detailed log">
                 <ListBox Height="300" Width="400"  x:Name="LogItems" />
-            </Expander>
+            </Expander> 
+            <Slider Width="200" Margin="5,0,0,0" Name="AngleSlider" Minimum="-60" Maximum="60" ValueChanged="AngleSlider_ValueChanged" Value="25"  AutoToolTipPlacement="TopLeft" AutoToolTipPrecision="0" />
+            <ToggleButton x:Name="ExpandingOrContracting" Margin="5,0,0,0" Checked="ExpandingOrContracting_Checked" Unchecked="ExpandingOrContracting_Unchecked" IsChecked="{x:Null}" />
+            <ToggleButton x:Name="QueueRotation" Margin="5,0,0,0" Checked="QueueRotation_Checked" Unchecked="QueueRotation_Unchecked" IsChecked="{x:Null}" />
         </StackPanel>
     </Grid>
 </Window>

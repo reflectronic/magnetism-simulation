@@ -1,8 +1,10 @@
 ﻿module Simulation.Vectors
+open System
 open NonStructuralComparison
+open Microsoft.FSharp.Core.LanguagePrimitives
 
 [<Struct>]
-[<System.Diagnostics.DebuggerDisplay("(X={X}, Y={Y}, Z={Z})")>]
+[<Diagnostics.DebuggerDisplay("(X={X}, Y={Y}, Z={Z})")>]
 type Vector3<[<Measure>] 'T> =
     val X: float<'T>;
     val Y: float<'T>;
@@ -48,6 +50,13 @@ type Vector3<[<Measure>] 'T> =
         $"(X = {this.X}, Y = {this.Y}, Z = {this.Z})"
 
 
+let NumericsVector (vector3: Vector3<_>) = 
+    Numerics.Vector3(float32 vector3.X, float32 vector3.Y, float32 vector3.Z)
+
+let SimulationVector (vector3: Numerics.Vector3) = 
+    let convert = float >> FloatWithMeasure
+    Vector3<'a>(convert vector3.X, convert vector3.Y, convert vector3.Z)
+ 
 let Dot(left: Vector3<'L>, right: Vector3<'R>) =
         (left.X * right.X) + (left.Y * right.Y) + (left.Z * right.Z);
 
