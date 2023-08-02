@@ -125,9 +125,10 @@ module Simulation =
                 let dist = Length(Cross(a, n)) / Length(n)
 
                 dist < o.Radius + cylRad)
-            //|> PSeq.map (fun c ->
-            //)
-            |> PSeq.sortBy (fun c -> let (endPt, startPt, _) = c in angleBetween o.Position (endPt - startPt))
+            |> PSeq.sortBy (fun c ->    
+                let betweenForceDirecton pt = angleBetween magneticForce (pt - o.Position)
+                let (p1, p2, _) = c in max (betweenForceDirecton p1) (betweenForceDirecton p2))
+            |> PSeq.filter (fun c -> let (endPt, startPt, _) = c in angleBetween (endPt - startPt) magneticForce > (Pi / 4.))
             |> Seq.tryHead
             |> Option.map (fun c -> let (endPt, startPt, _) = c in (endPt, startPt))
 
@@ -155,7 +156,7 @@ module Simulation =
             else
                 0.<m/s>
 
-        let effectiveForce cyl (externalForce: Vector3<N>)  =
+        let effectiveForce cyl (magneticForce: Vector3<N>)  =
             let m1 = -0.80
             let m2 = 1.82
 
@@ -166,12 +167,25 @@ module Simulation =
                 if isBetween (31. * Pi / 36.) Pi then 1. else
                 m1 * (Cos(psi) |> squared) - m2 * Cos(psi)
 
+            let cylFacingCloserDirection endPt startPt = 
+                let angleBetweenForce = angleBetween magneticForce
+                let minBy projection p1 p2 =
+                    if projection p1 < projection p2 then
+                        p1
+                    else
+                        p2
+
+                let startToEnd = endPt - startPt
+                let endToStart = startPt - endPt
+
+                minBy angleBetweenForce startToEnd endToStart
+
             let n, psi =
                 match cyl with 
-                | Some (endPt, startPt) -> let n = Normalize(endPt - startPt) in n, angleBetween externalForce n
-                | None -> Normalize(externalForce), 0.
+                | Some (endPt, startPt) -> let n = Normalize(cylFacingCloserDirection endPt startPt) in n, angleBetween magneticForce n
+                | None -> Normalize(magneticForce), 0.
 
-            (1. - a(psi)) * externalForce + a(psi) * (Dot(externalForce, n)) * n
+            (1. - a(psi)) * magneticForce + a(psi) * (Dot(magneticForce, n)) * n
 
         let lCyl = cylinder l [] lMagneticForce
         let sCyl = cylinder s l.Path sMagneticForce
@@ -194,10 +208,6 @@ module Simulation =
                     lambda * diameter(s)
 
             let projectedMagneticForce = effectiveForce sCyl sMagneticForce
-
-            if projectedMagneticForce <> projectedMagneticForce then
-                System.Diagnostics.Debugger.Break();
-
             Normalize(projectedMagneticForce) * tearingVelocityMagnitude (sMagneticForce, smallThreshold, diameter(s))
 
         let lPos = lVelocity * dt + l.Position

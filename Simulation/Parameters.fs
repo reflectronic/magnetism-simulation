@@ -16,5 +16,5 @@ module Parameters =
             { Position = startingPos;  Radius = largeRadius; Path = [pt1; pt2] },
             { Position = Vector3.Zero; Radius = smallRadius; Path = [] })
 
-    let fieldStrength isExpanding = if isExpanding then 0.8<T> else 0.25<T>
+    let fieldStrength isExpanding = if isExpanding then 1.<T> else 0.25<T>
     
