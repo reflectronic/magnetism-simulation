@@ -144,7 +144,7 @@ public partial class MainWindow : Window
                 true, // start the balls by expanding.
                 (true, objectPair), // wasExpanding is true.,
                 iter: 0,
-                callback: FuncConvert.FromFunc<(ObjectPair, bool, (FSharpOption<Tuple<Vector3, Vector3>>, FSharpOption<Tuple<Vector3, Vector3>>, Vector3, SimulationState)), SimulationResult<SimulationState, ValueTuple>>((parameters) =>
+                callback: FuncConvert.FromFunc<(ObjectPair, bool, (FSharpOption<Tuple<Vector3, Vector3, double>>, FSharpOption<Tuple<Vector3, Vector3, double>>, Vector3, SimulationState)), SimulationResult<SimulationState, ValueTuple>>((parameters) =>
             {
                 unpauseEvent.Wait();
 

@@ -34,6 +34,15 @@ module Calculate =
     let inline internal cubed v = v * v * v
     let inline internal squared v = v * v
 
+    let isBetween (lower, upper) x = lower <= x && x <= upper
+    let distance pt1 pt2 = Length(pt1 - pt2)
+
+    let cosBetween a b =
+        let res = Clamp(Dot(a, b) / (Length(a) * Length(b)), -1., 1.)
+        if IsNaN res then 0. else res
+
+    let angleBetween a b = Acos(cosBetween a b)
+
     let Mu_0 = FloatWithMeasure<H/m> (4. * Pi * 1e-7)
 
     let H (M: Vector3<A m^2>, r: Vector3<m>) = (1. / (4. * Pi)) * (3. * (Dot(M, r) * r) / (Length(r) |> pow5) - (M / (Length(r) |> cubed)))
@@ -63,7 +72,7 @@ module Calculate =
             Normalize(flippedDelta)
         fieldDirection * fieldStrength
 
-open Calculate
+open Calculate  
 open FSharp.Collections.ParallelSeq
 
 [<Struct>]
@@ -80,10 +89,6 @@ module Simulation =
                  iter
                  callback =
         let struct(l, s) = pair
-
-        let distance pt1 pt2 = Length(pt1 - pt2)
-
-        let angleBetween a b = Acos(Clamp(Dot(a, b) / (Length(a) * Length(b)), -1., 1))
 
         let cylinders o p1 p2 = 
             let rec makeCyls (endPt: PathFace) rest cyls =
@@ -114,6 +119,19 @@ module Simulation =
             | [] -> []
             | _ -> List.tail l
 
+        let closestPointToMagneticForce o cyl magneticForce =
+            let betweenForceDirecton pt = angleBetween magneticForce (pt - o.Position)
+            let (p1, p2, _) = cyl
+            
+            let p1ToForce = betweenForceDirecton p1
+            let p2ToForce = betweenForceDirecton p2
+
+            if p1ToForce > p2ToForce then
+                p1, p1ToForce
+            else
+                p2, p2ToForce
+
+
         let cylinder o oth magneticForce =
             cylinders o o.Path oth
             |> trySkip
@@ -125,12 +143,9 @@ module Simulation =
                 let dist = Length(Cross(a, n)) / Length(n)
 
                 dist < o.Radius + cylRad)
-            |> PSeq.sortBy (fun c ->    
-                let betweenForceDirecton pt = angleBetween magneticForce (pt - o.Position)
-                let (p1, p2, _) = c in max (betweenForceDirecton p1) (betweenForceDirecton p2))
+            |> PSeq.sortBy (fun c -> closestPointToMagneticForce o c magneticForce |> snd)
             |> PSeq.filter (fun c -> let (endPt, startPt, _) = c in angleBetween (endPt - startPt) magneticForce > (Pi / 4.))
             |> Seq.tryHead
-            |> Option.map (fun c -> let (endPt, startPt, _) = c in (endPt, startPt))
 
         let magneticMoment (o: SimulatedObject) =
             let volume = (4./3.) * Pi * (o.Radius |> cubed)
@@ -142,99 +157,83 @@ module Simulation =
         let forwardThreshold = 0.012<N>
         let sigma = forwardThreshold / ((Pi / 4.) * ((3.2e-3<m>) |> squared))
 
-        let backwardsThreshold = 0.008<N>
+        let backwardsThreshold = 0.0458<N>
         let lambda = backwardsThreshold / (3.2e-3<m>)
 
         let gamma = 0.004<N> / (3.2e-3<m> * 0.5e-3<m/s>)
 
         let diameter (o: SimulatedObject) = o.Radius * 2.
 
-        let tearingVelocityMagnitude (force: Vector3<N>, threshold: float<N>, diameter: float<m>) = 
-            let mag = (Length(force) - threshold) / (gamma * diameter)
-            if mag >= 0.<m/s> && (Abs(float force.X) >= float threshold) then
-                mag
-            else
-                0.<m/s>
-
-        let effectiveForce cyl (magneticForce: Vector3<N>)  =
+        let effectiveForce o cyl (magneticForce: Vector3<N>)  =
             let m1 = -0.80
             let m2 = 1.82
 
-            let a psi = 
-                let isBetween lower upper = lower <= psi && psi <= upper
+            let a cosPsi = 
+                let psi = Acos(cosPsi)
+                if psi |> isBetween (0., Pi / 2.) then 
+                    0. 
+                else if psi |> isBetween (31. * Pi / 36., Pi) then 
+                    1. 
+                else
+                    m1 * (cosPsi |> squared) - m2 * cosPsi
 
-                if isBetween 0. (Pi / 2.) then 0. else
-                if isBetween (31. * Pi / 36.) Pi then 1. else
-                m1 * (Cos(psi) |> squared) - m2 * Cos(psi)
+            let cylidnerAnisotropyDirection cyl = closestPointToMagneticForce o cyl magneticForce |> fst
 
-            let cylFacingCloserDirection endPt startPt = 
-                let angleBetweenForce = angleBetween magneticForce
-                let minBy projection p1 p2 =
-                    if projection p1 < projection p2 then
-                        p1
-                    else
-                        p2
-
-                let startToEnd = endPt - startPt
-                let endToStart = startPt - endPt
-
-                minBy angleBetweenForce startToEnd endToStart
-
-            let n, psi =
+            let n, cosPsi =
                 match cyl with 
-                | Some (endPt, startPt) -> let n = Normalize(cylFacingCloserDirection endPt startPt) in n, angleBetween magneticForce n
+                | Some cyl -> let n = Normalize(cylidnerAnisotropyDirection cyl) in n, cosBetween magneticForce n
                 | None -> Normalize(magneticForce), 0.
 
-            (1. - a(psi)) * magneticForce + a(psi) * (Dot(magneticForce, n)) * n
+            n, (1. - a(cosPsi)) * magneticForce + a(cosPsi) * (Dot(magneticForce, n)) * n
 
         let lCyl = cylinder l [] lMagneticForce
         let sCyl = cylinder s l.Path sMagneticForce
 
-        let lVelocity = 
-            let largeThreshold = 
-                if lCyl.IsNone then 
-                    sigma * (diameter(l) |> squared)
+        let yieldForce effectiveForce anisotropy = 
+            let cosXi = cosBetween effectiveForce anisotropy 
+            let Fym cosXi = 
+                let n1 = 0.0058<N>
+                let n2 = -0.0138<N>
+                let n3 = 0.0118<N>
+
+                let xi = Acos(cosXi)
+                if xi |> isBetween (0., Pi / 2.) then 
+                    n3
                 else
-                    lambda * diameter(l)
+                    n1 * (cosXi |> squared) - n2 * cosXi + n3
+            let Fym = Fym cosXi
 
-            let projectedMagneticForce = effectiveForce lCyl lMagneticForce
-            Normalize(projectedMagneticForce) * tearingVelocityMagnitude (projectedMagneticForce, largeThreshold, diameter(l)) 
+            if Length(effectiveForce) < Fym then
+                effectiveForce
+            else
+                Normalize(effectiveForce) * Fym
 
-        let sVelocity = 
-            let smallThreshold =
-                if sCyl.IsNone then 
-                    sigma * (diameter(s) |> squared)
-                else
-                    lambda * diameter(s)
+        let velocity o cyl magneticForce =
+            let anisotropy, effectiveForce = effectiveForce o cyl magneticForce
+            let yieldForce = yieldForce effectiveForce anisotropy
 
-            let projectedMagneticForce = effectiveForce sCyl sMagneticForce
-            Normalize(projectedMagneticForce) * tearingVelocityMagnitude (sMagneticForce, smallThreshold, diameter(s))
+            let netForce = effectiveForce - yieldForce
 
-        let lPos = lVelocity * dt + l.Position
-            (*match lCyl with 
-            | Some cyl -> let (pt1, pt2) = cyl in projectPoint pt1 pt2 l.Position
-            | None -> l.Position*)
+            Normalize(netForce) * Length(netForce) / (gamma * (diameter o))
 
-        let sPos = sVelocity * dt + s.Position
-            (*match sCyl with
-            | Some cyl -> let (pt1, pt2) = cyl in projectPoint pt1 pt2 s.Position
-            | None -> s.Position*)
+        let deltaSphere o cyl magneticForce =
+            let velocity = velocity o cyl magneticForce
+            let position = (velocity * dt) + o.Position
+            let path = 
+                match cyl with
+                | None when iter % 50 = 0 -> { Position = position; Radius = o.Radius }::o.Path
+                | _ -> o.Path
 
-        let addPathFace o l cyl p =
-            match cyl with 
-            | None when iter % 50 = 0 -> { Position = p; Radius = o.Radius }::l
-            | _ -> l
+            velocity, { o with Position = position; Path = path }
 
-        let pair = struct(
-                { l with Position = lPos;
-                            Path = addPathFace l l.Path lCyl lPos }, 
-                { s with Position = sPos;
-                            Path = addPathFace s s.Path sCyl sPos })
+        let largeVelocty, l = deltaSphere l lCyl lMagneticForce
+        let _, s            = deltaSphere s sCyl sMagneticForce
+        let pair = struct(l, s)
 
         // If we are currently expanding, we should start contracting when the large ball can no longer overcome the threshold.
         // If we are currently contracting, we should start expanding when the large ball begins to overcome its threshold.
         // If the external field is zero, the balls cannot be moving, so we cannot make a determination about the direction of the fields. Carry the previous state forward.
-        let shouldExpand = if externalBField <> Vector3.Zero then Length(lVelocity) <> 0.<m/s> else isExpanding
+        let shouldExpand = if externalBField <> Vector3.Zero then Length(largeVelocty) <> 0.<m/s> else isExpanding
         // let shouldExpand = true
     
         match callback struct(pair, shouldExpand, struct(lCyl, sCyl, lMagneticForce, state)) with

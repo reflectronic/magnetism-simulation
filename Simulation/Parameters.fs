@@ -4,7 +4,7 @@ open Vectors
 open FSharp.Data.UnitSystems.SI.UnitSymbols
     
 module Parameters =
-    let standardObjects () =    
+    let standardObjects () =
         let largeRadius = 0.005<m>;
         let smallRadius = largeRadius * (2. / 3.)
 
