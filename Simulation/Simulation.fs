@@ -17,6 +17,7 @@ type PathFace =
 [<Struct>]
 type SimulatedObject = 
     { 
+        Name: string
         Position: Vector3<m>;
         Radius: float<m>;
         Path: PathFace list
@@ -119,7 +120,7 @@ module Simulation =
             | [] -> []
             | _ -> List.tail l
 
-        let closestPointToMagneticForce o cyl magneticForce =
+        let cylPointsByProximityToForce o cyl magneticForce =
             let betweenForceDirecton pt = angleBetween magneticForce (pt - o.Position)
             let (p1, p2, _) = cyl
             
@@ -127,9 +128,9 @@ module Simulation =
             let p2ToForce = betweenForceDirecton p2
 
             if p1ToForce > p2ToForce then
-                p1, p1ToForce
+                p1, p2, p1ToForce
             else
-                p2, p2ToForce
+                p2, p1, p2ToForce
 
 
         let cylinder o oth magneticForce =
@@ -143,7 +144,7 @@ module Simulation =
                 let dist = Length(Cross(a, n)) / Length(n)
 
                 dist < o.Radius + cylRad)
-            |> PSeq.sortBy (fun c -> closestPointToMagneticForce o c magneticForce |> snd)
+            |> PSeq.sortBy (fun c -> let (_, _, angleOfFurther) = cylPointsByProximityToForce o c magneticForce in angleOfFurther)
             |> PSeq.filter (fun c -> let (endPt, startPt, _) = c in angleBetween (endPt - startPt) magneticForce > (Pi / 4.))
             |> Seq.tryHead
 
@@ -173,11 +174,13 @@ module Simulation =
                 if psi |> isBetween (0., Pi / 2.) then 
                     0. 
                 else if psi |> isBetween (31. * Pi / 36., Pi) then 
-                    1. 
+                    1.  
                 else
                     m1 * (cosPsi |> squared) - m2 * cosPsi
 
-            let cylidnerAnisotropyDirection cyl = closestPointToMagneticForce o cyl magneticForce |> fst
+            let cylidnerAnisotropyDirection cyl = 
+                let (closer, further, _) = cylPointsByProximityToForce o cyl magneticForce
+                closer - further
 
             let n, cosPsi =
                 match cyl with 
@@ -189,7 +192,7 @@ module Simulation =
         let lCyl = cylinder l [] lMagneticForce
         let sCyl = cylinder s l.Path sMagneticForce
 
-        let yieldForce effectiveForce anisotropy = 
+        let yieldForce o effectiveForce anisotropy = 
             let cosXi = cosBetween effectiveForce anisotropy 
             let Fym cosXi = 
                 let n1 = 0.0058<N>
@@ -198,10 +201,15 @@ module Simulation =
 
                 let xi = Acos(cosXi)
                 if xi |> isBetween (0., Pi / 2.) then 
-                    n3
+                    n3, true
                 else
-                    n1 * (cosXi |> squared) - n2 * cosXi + n3
-            let Fym = Fym cosXi
+                    n1 * (cosXi |> squared) - n2 * cosXi + n3, false
+            let unscaledFym, isTearing = Fym cosXi
+            let Fym =
+                if isTearing then
+                    unscaledFym * ((o.Radius / 3.2e-3<m>) |> squared)
+                else
+                    unscaledFym * (o.Radius / 3.2e-3<m>)
 
             if Length(effectiveForce) < Fym then
                 effectiveForce
@@ -210,11 +218,10 @@ module Simulation =
 
         let velocity o cyl magneticForce =
             let anisotropy, effectiveForce = effectiveForce o cyl magneticForce
-            let yieldForce = yieldForce effectiveForce anisotropy
+            let yieldForce = yieldForce o effectiveForce anisotropy
 
             let netForce = effectiveForce - yieldForce
-
-            Normalize(netForce) * Length(netForce) / (gamma * (diameter o))
+            netForce / (gamma * (diameter o))
 
         let deltaSphere o cyl magneticForce =
             let velocity = velocity o cyl magneticForce
@@ -229,6 +236,7 @@ module Simulation =
         let largeVelocty, l = deltaSphere l lCyl lMagneticForce
         let _, s            = deltaSphere s sCyl sMagneticForce
         let pair = struct(l, s)
+
 
         // If we are currently expanding, we should start contracting when the large ball can no longer overcome the threshold.
         // If we are currently contracting, we should start expanding when the large ball begins to overcome its threshold.
