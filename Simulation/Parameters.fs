@@ -14,7 +14,7 @@ module Parameters =
 
         struct (
             { Name = "Large"; Position = startingPos;  Radius = largeRadius; Path = [pt1; pt2] },
-            { Name = "Small"; Position = Vector3.Zero; Radius = smallRadius; Path = [] })
+            { Name = "Small"; Position = Vector3.Zero; Radius = smallRadius; Path = [{ Radius = smallRadius; Position = Vector3.Zero }] })
 
-    let fieldStrength isExpanding = if isExpanding then 1.<T> else 0.34<T>
+    let fieldStrength isExpanding = if isExpanding then 1.<T> else 0.3<T>
     

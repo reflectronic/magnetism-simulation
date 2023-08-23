@@ -74,7 +74,6 @@ module Calculate =
         fieldDirection * fieldStrength
 
 open Calculate  
-open FSharp.Collections.ParallelSeq
 
 [<Struct>]
 type SimulationResult<'a, 'b> =
@@ -115,28 +114,34 @@ module Simulation =
 
             cylMatches ||> List.append
 
-        let trySkip l = 
-            match l with
-            | [] -> []
-            | _ -> List.tail l
-
         let cylPointsByProximityToForce o cyl magneticForce =
-            let betweenForceDirecton pt = angleBetween magneticForce (pt - o.Position)
+            let maxBy a (aValue: float<_>) aResult b (bValue: float<_>) bResult = 
+                if aValue > bValue then
+                    a, b, aResult
+                else
+                    b, a, bResult
+
+            let minBy a (aValue: float<_>) aResult b (bValue: float<_>) bResult = 
+                if aValue < bValue then
+                    a, b, aResult
+                else
+                    b, a, bResult
+
+            let betweenForceDirection pt = angleBetween magneticForce (pt - o.Position)
+            let distanceToCenter pt = Length(pt - o.Position)
+
             let (p1, p2, _) = cyl
             
-            let p1ToForce = betweenForceDirecton p1
-            let p2ToForce = betweenForceDirecton p2
-
-            if p1ToForce > p2ToForce then
-                p1, p2, p1ToForce
+            let p1ToForce = betweenForceDirection p1
+            let p2ToForce = betweenForceDirection p2
+            if  (Abs(p1ToForce - p2ToForce) < 0.001) then
+                minBy p1 (distanceToCenter p1) p1ToForce p2 (distanceToCenter p2) p2ToForce
             else
-                p2, p1, p2ToForce
-
+                maxBy p1 p1ToForce p1ToForce p2 p2ToForce p2ToForce
 
         let cylinder o oth magneticForce =
             cylinders o o.Path oth
-            |> trySkip
-            |> PSeq.filter (fun c ->
+            |> Seq.filter (fun c ->
                 let (endPt, startPt, cylRad) = c
 
                 let n = endPt - startPt
@@ -144,8 +149,7 @@ module Simulation =
                 let dist = Length(Cross(a, n)) / Length(n)
 
                 dist < o.Radius + cylRad)
-            |> PSeq.sortBy (fun c -> let (_, _, angleOfFurther) = cylPointsByProximityToForce o c magneticForce in angleOfFurther)
-            |> PSeq.filter (fun c -> let (endPt, startPt, _) = c in angleBetween (endPt - startPt) magneticForce > (Pi / 4.))
+            |> Seq.sortBy (fun c -> let (_, _, angleOfFurther) = cylPointsByProximityToForce o c magneticForce in angleOfFurther)
             |> Seq.tryHead
 
         let magneticMoment (o: SimulatedObject) =
@@ -154,12 +158,6 @@ module Simulation =
 
         let lMagneticForce = magneticForce(l.Position - s.Position, magneticMoment(l), magneticMoment(s))
         let sMagneticForce = -lMagneticForce
-
-        let forwardThreshold = 0.012<N>
-        let sigma = forwardThreshold / ((Pi / 4.) * ((3.2e-3<m>) |> squared))
-
-        let backwardsThreshold = 0.0458<N>
-        let lambda = backwardsThreshold / (3.2e-3<m>)
 
         let gamma = 0.004<N> / (3.2e-3<m> * 0.5e-3<m/s>)
 
@@ -172,9 +170,9 @@ module Simulation =
             let a cosPsi = 
                 let psi = Acos(cosPsi)
                 if psi |> isBetween (0., Pi / 2.) then 
-                    0. 
+                    0.
                 else if psi |> isBetween (31. * Pi / 36., Pi) then 
-                    1.  
+                    1.
                 else
                     m1 * (cosPsi |> squared) - m2 * cosPsi
 
@@ -183,18 +181,21 @@ module Simulation =
                 closer - further
 
             let n, cosPsi =
-                match cyl with 
-                | Some cyl -> let n = Normalize(cylidnerAnisotropyDirection cyl) in n, cosBetween magneticForce n
-                | None -> Normalize(magneticForce), 0.
+                let n = Normalize(cylidnerAnisotropyDirection cyl) in n, cosBetween magneticForce n
 
             n, (1. - a(cosPsi)) * magneticForce + a(cosPsi) * (Dot(magneticForce, n)) * n
 
-        let lCyl = cylinder l [] lMagneticForce
-        let sCyl = cylinder s l.Path sMagneticForce
+        let cylAndPath o oth magneticForce = 
+            match cylinder o oth magneticForce with
+            | None -> (o.Position, o.Path.Head.Position, o.Radius), { Position = o.Position; Radius = o.Radius }::o.Path
+            | Some cyl -> cyl, o.Path
+
+        let lCyl, lPath = cylAndPath l [] lMagneticForce
+        let sCyl, sPath = cylAndPath s l.Path sMagneticForce
 
         let yieldForce o effectiveForce anisotropy = 
             let cosXi = cosBetween effectiveForce anisotropy 
-            let Fym cosXi = 
+            let Fym cosXi =
                 let n1 = 0.0058<N>
                 let n2 = -0.0138<N>
                 let n3 = 0.0118<N>
@@ -223,20 +224,15 @@ module Simulation =
             let netForce = effectiveForce - yieldForce
             netForce / (gamma * (diameter o))
 
-        let deltaSphere o cyl magneticForce =
+        let deltaSphere o cyl path magneticForce =
             let velocity = velocity o cyl magneticForce
             let position = (velocity * dt) + o.Position
-            let path = 
-                match cyl with
-                | None when iter % 50 = 0 -> { Position = position; Radius = o.Radius }::o.Path
-                | _ -> o.Path
 
             velocity, { o with Position = position; Path = path }
 
-        let largeVelocty, l = deltaSphere l lCyl lMagneticForce
-        let _, s            = deltaSphere s sCyl sMagneticForce
+        let largeVelocty, l = deltaSphere l lCyl lPath lMagneticForce
+        let _, s            = deltaSphere s sCyl sPath sMagneticForce
         let pair = struct(l, s)
-
 
         // If we are currently expanding, we should start contracting when the large ball can no longer overcome the threshold.
         // If we are currently contracting, we should start expanding when the large ball begins to overcome its threshold.

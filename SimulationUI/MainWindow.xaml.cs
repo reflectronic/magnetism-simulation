@@ -49,7 +49,7 @@ public partial class MainWindow : Window
     readonly Color[] colors = typeof(Colors).GetProperties(BindingFlags.Public | BindingFlags.Static)
         .Where(a => a.PropertyType == typeof(Color))
         .Select(a => (Color)a.GetValue(null))
-        .Where(c => c != Colors.Transparent)
+        .Where(c => c.A == byte.MaxValue)
         .ToArray();
 
     double angle;
@@ -132,8 +132,8 @@ public partial class MainWindow : Window
         ExpandingOrContracting.IsChecked = doExpandButton = true;
         QueueRotation.IsChecked = queuedForRotation = false;
 
-        HashSet<Tuple<Vector3, Vector3>> tuples1 = new();
-        HashSet<Tuple<Vector3, Vector3>> tuples2 = new();
+        HashSet<Tuple<Vector3, Vector3, double>> tuples1 = new();
+        HashSet<Tuple<Vector3, Vector3, double>> tuples2 = new();
 
         void ThreadStart()
         {
@@ -144,7 +144,7 @@ public partial class MainWindow : Window
                 true, // start the balls by expanding.
                 (true, objectPair), // wasExpanding is true.,
                 iter: 0,
-                callback: FuncConvert.FromFunc<(ObjectPair, bool, (FSharpOption<Tuple<Vector3, Vector3, double>>, FSharpOption<Tuple<Vector3, Vector3, double>>, Vector3, SimulationState)), SimulationResult<SimulationState, ValueTuple>>((parameters) =>
+                callback: FuncConvert.FromFunc<(ObjectPair, bool, (Tuple<Vector3, Vector3, double>, Tuple<Vector3, Vector3, double>, Vector3, SimulationState)), SimulationResult<SimulationState, ValueTuple>>((parameters) =>
             {
                 unpauseEvent.Wait();
 
@@ -164,27 +164,31 @@ public partial class MainWindow : Window
                     effectiveAngle,
                     Parameters.fieldStrength(willExpand) / ((queuedForRotation && !willExpand) ? double.Pow(double.Cos(effectiveAngle), 3) : 1));
 
-                if (counter % 40 == 0)
+                if (counter % 100 == 0)
                 {
-                    Dispatcher.InvokeAsync(() =>
+                    try
                     {
-                        UpdateUserInterface(externalField);
-
-                        /*if (c1 != null && tuples1.Add(c1.Value))
+                        Dispatcher.Invoke(() =>
                         {
-                            var (p1, p2) = c1.Value;
-                            AddCylinder(p1, p2, objectPair.Item1.Radius);
-                        }
-    
-                        if (c2 != null && tuples2.Add(c2.Value))
-                        {
-                            var (p1, p2) = c2.Value;
-                            AddCylinder(p1, p2, objectPair.Item2.Radius);
-                        }*/
+                            UpdateUserInterface(externalField);
 
-                        DistanceText.Text = Length(magneticForce).ToString("0.00000");
+                            if (tuples1.Add(c1))
+                            {
+                                var (p1, p2, r) = c1;
+                                AddCylinder(p1, p2, r);
+                            }
 
-                    }, System.Windows.Threading.DispatcherPriority.Background);
+                            if (tuples2.Add(c2))
+                            {
+                                var (p1, p2, r) = c2;
+                                AddCylinder(p1, p2, r);
+                            }
+
+                            DistanceText.Text = Length(objectPair.Item1.Position - objectPair.Item2.Position).ToString("0.00000");
+
+                        }, System.Windows.Threading.DispatcherPriority.Background);
+                    }
+                    catch { }
                 }
 
                 void Log(string message) => Dispatcher.InvokeAsync(() => LogItems.Items.Add($"{counter}: {message}"), System.Windows.Threading.DispatcherPriority.SystemIdle);
@@ -268,8 +272,14 @@ public partial class MainWindow : Window
 
     private void AddCylinder(Vector3 pt1, Vector3 pt2, double radius)
     {
+        var scaledPt1 = (pt1.AsVector3D() * 1000).ToPoint3D();
+        var scaledPt2 = (pt2.AsVector3D() * 1000).ToPoint3D();
+        var scaledRadius = radius * 1000;
+
         var builder = new MeshBuilder();
-        builder.AddCylinder((pt1.AsVector3D() * 1000).ToPoint3D(), (pt2.AsVector3D() * 1000).ToPoint3D(), radius * 1000);
+        builder.AddCylinder(scaledPt1, scaledPt2, scaledRadius);
+        builder.AddSphere(scaledPt1, scaledRadius);
+        builder.AddSphere(scaledPt2, scaledRadius);
         var model = CreateFrozenModel(builder, new SolidColorBrush(Colors.GreenYellow with { A = 50 }));
         Viewport.Children.Add(new ModelVisual3D { Content = model });
     }
@@ -308,8 +318,6 @@ public partial class MainWindow : Window
     private void QueueRotation_Checked(object sender, RoutedEventArgs e)
     {
         queuedForRotation = true;
-        QueueRotation.Content = "Queued a rotation";
-
         ExpandingOrContracting.IsChecked = true;
         ExpandingOrContracting_Checked(null, null);
     }
@@ -317,7 +325,5 @@ public partial class MainWindow : Window
     private void QueueRotation_Unchecked(object sender, RoutedEventArgs e)
     {
         queuedForRotation = false;
-        QueueRotation.Content = "Queue for rotation";
-
     }
 }

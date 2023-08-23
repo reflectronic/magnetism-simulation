@@ -26,7 +26,7 @@
             </Expander> 
             <Slider Width="200" Margin="5,0,0,0" Name="AngleSlider" Minimum="-60" Maximum="60" ValueChanged="AngleSlider_ValueChanged" Value="25"  AutoToolTipPlacement="TopLeft" AutoToolTipPrecision="0" />
             <ToggleButton x:Name="ExpandingOrContracting" Margin="5,0,0,0" Checked="ExpandingOrContracting_Checked" Unchecked="ExpandingOrContracting_Unchecked" IsChecked="{x:Null}" />
-            <ToggleButton x:Name="QueueRotation" Margin="5,0,0,0" Checked="QueueRotation_Checked" Unchecked="QueueRotation_Unchecked" IsChecked="{x:Null}" />
+            <ToggleButton x:Name="QueueRotation" Margin="5,0,0,0" Checked="QueueRotation_Checked" Unchecked="QueueRotation_Unchecked" IsChecked="{x:Null}" Content="Rotate" />
         </StackPanel>
     </Grid>
 </Window>
